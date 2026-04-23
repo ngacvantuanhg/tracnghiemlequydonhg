@@ -47,7 +47,7 @@ def parse_docx_smart(file):
     return questions
 
 # --- GIAO DIỆN ---
-st.title("🏫 Hệ Thống Báo Cáo Giáo Dục Trực Tuyến")
+st.title("🏫 Hệ Thống Thi Trực Tuyến Trường THCS Lê Quý Đôn, phường Hà Giang 1")
 
 tab_hs, tab_gv = st.tabs(["👨‍🎓 PHÒNG THI HỌC SINH", "👩‍🏫 KHU VỰC QUẢN LÝ GIÁO VIÊN"])
 
