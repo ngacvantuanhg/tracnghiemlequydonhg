@@ -54,107 +54,81 @@ tab_hs, tab_gv = st.tabs(["👨‍🎓 PHÒNG THI HỌC SINH", "👩‍🏫 KHU 
 with tab_hs:
     st.subheader("📝 PHÒNG THI TRỰC TUYẾN")
     
-    # Tạo form nhập liệu ban đầu
+    # Ô nhập mã đề để tìm đề
     with st.container(border=True):
         c1, c2, c3 = st.columns([1, 2, 1])
         with c2:
-            ma_de_input = st.text_input("🔑 Nhập Mã đề thi cô giáo giao:", placeholder="Ví dụ: 101, 002...")
+            ma_de_input = st.text_input("🔑 Nhập Mã đề thi cô giáo giao:", placeholder="Ví dụ: 101, 002...", key="input_ma_de")
             
     if ma_de_input:
         res = supabase.table("exam_questions").select("*").eq("ma_de", ma_de_input).execute()
         if res.data:
             exam_info = res.data[0]
             quiz = exam_info["nội_dung_json"]
+            st.success(f"✅ Đề thi: **{exam_info.get('ten_lop')}** | Ngày: **{exam_info.get('ngay_thi')}**")
             
-            # Hiển thị thông tin kỳ thi cho học sinh kiểm tra
-            st.success(f"✅ Đã tìm thấy đề thi: **Môn kiểm tra/Lớp:** {exam_info.get('ten_lop')} | **Ngày:** {exam_info.get('ngay_thi')}")
-            
-            # Khởi tạo trạng thái làm bài nếu chưa có
             if f"started_{ma_de_input}" not in st.session_state:
                 st.session_state[f"started_{ma_de_input}"] = False
 
-            # Form điền thông tin cá nhân trước khi thi
+            # GIAO DIỆN CHƯA BẮT ĐẦU
             if not st.session_state[f"started_{ma_de_input}"]:
                 with st.form("student_info_form"):
                     col_a, col_b = st.columns(2)
-                    name = col_a.text_input("👤 Họ và Tên của em:", placeholder="Nguyễn Văn A")
-                    actual_class = col_b.text_input("🏫 Em học lớp nào:", placeholder="Ví dụ: 9A1, 8B2...")
-                    
-                    st.warning("⚠️ Lưu ý: Sau khi nhấn Bắt đầu, em hãy tập trung làm bài và không tải lại trang nhé!")
-                    
+                    name = col_a.text_input("👤 Họ và Tên của em:")
+                    actual_class = col_b.text_input("🏫 Em học lớp nào:")
                     if st.form_submit_button("🚀 BẮT ĐẦU LÀM BÀI", use_container_width=True):
                         if name and actual_class:
                             st.session_state[f"started_{ma_de_input}"] = True
-                            st.session_state[f"student_name_{ma_de_input}"] = name
-                            st.session_state[f"student_class_{ma_de_input}"] = actual_class
+                            st.session_state[f"st_name_{ma_de_input}"] = name
+                            st.session_state[f"st_class_{ma_de_input}"] = actual_class
                             st.rerun()
-                        else:
-                            st.error("❌ Em vui lòng điền đủ Họ tên và Lớp của mình nhé!")
+                        else: st.error("❌ Điền đủ Họ tên và Lớp nhé!")
             
-            # Giao diện khi đã nhấn Bắt đầu làm bài
+            # GIAO DIỆN ĐANG LÀM BÀI
             else:
-                st.info(f"👨‍🎓 Thí sinh: **{st.session_state[f'student_name_{ma_de_input}'].upper()}** | Lớp: **{st.session_state[f'student_class_{ma_de_input}']}**")
+                st.info(f" Thí sinh: **{st.session_state[f'st_name_{ma_de_input}'].upper()}** | Lớp: **{st.session_state[f'st_class_{ma_de_input}']}**")
                 
                 with st.form("quiz_form"):
                     user_selections = {}
                     for idx, q in enumerate(quiz):
-                        user_selections[idx] = st.radio(
-                            f"**{q['question']}**", 
-                            q['options'], 
-                            index=None, 
-                            key=f"quiz_{ma_de_input}_{idx}"
-                        )
+                        st.write(f"**Câu {idx+1}: {q['question']}**")
+                        user_selections[idx] = st.radio("Chọn đáp án:", q['options'], index=None, key=f"q_{ma_de_input}_{idx}", label_visibility="collapsed")
+                        st.write("")
                     
-                    st.write("---")
-                    # --- ĐOẠN XỬ LÝ NỘP BÀI CẢM XÚC V15 ---
-                if st.form_submit_button("📤 NỘP BÀI THI", use_container_width=True):
-                    if not st.session_state[f"student_name_{ma_de_input}"] or not st.session_state[f"student_class_{ma_de_input}"]:
-                        st.error("⚠️ Em cần điền tên và lớp nhé!")
-                    else:
-                        # 1. TÍNH TOÁN DỮ LIỆU
+                    # NÚT NỘP BÀI NẰM TRONG FORM (TRÁNH LỖI)
+                    if st.form_submit_button("📤 NỘP BÀI THI", use_container_width=True):
                         da_lam = sum(1 for v in user_selections.values() if v is not None)
                         total_q = len(quiz)
                         correct_num = sum(1 for i, q in enumerate(quiz) if user_selections[i] and user_selections[i].startswith(q['answer']))
                         grade = round((correct_num / total_q) * 10, 2)
 
-                        # 2. LƯU VÀO DATABASE
+                        # Lưu kết quả
                         supabase.table("student_results").insert({
-                            "ma_de": ma_de_input, 
-                            "ho_ten": st.session_state[f"student_name_{ma_de_input}"], 
-                            "lop": st.session_state[f"student_class_{ma_de_input}"], 
-                            "diem": grade, 
-                            "so_cau_dung": f"{correct_num}/{total_q}",
-                            "lop_thi": exam_info.get('ten_lop'), 
+                            "ma_de": ma_de_input, "ho_ten": st.session_state[f"st_name_{ma_de_input}"], 
+                            "lop": st.session_state[f"st_class_{ma_de_input}"], "diem": grade, 
+                            "so_cau_dung": f"{correct_num}/{total_q}", "lop_thi": exam_info.get('ten_lop'), 
                             "ngay_thi": exam_info.get('ngay_thi')
                         }).execute()
 
-                        # 3. HIỂN THỊ CẢNH BÁO NẾU CHƯA LÀM HẾT
-                        if da_lam < total_q:
-                            st.warning(f"🔔 Em đã nộp bài thành công, nhưng lưu ý là em mới chỉ làm {da_lam}/{total_q} câu thôi nhé!")
-
-                        # 4. GIAO DIỆN KẾT QUẢ THEO ĐIỂM SỐ
+                        # Hiển thị cảm xúc theo điểm
+                        if da_lam < total_q: st.warning(f"🔔 Em đã nộp bài thành công, nhưng mới làm {da_lam}/{total_q} câu thôi nhé!")
                         st.markdown("---")
                         if grade < 5:
                             st.markdown("<h1 style='text-align: center;'>😔</h1>", unsafe_allow_html=True)
                             st.error(f"### Điểm của em: {grade}")
                             st.info("Em hãy cố gắng ở bài kiểm tra sau nhé, cô tin em sẽ làm được!")
-                            
                         elif 5 <= grade <= 7:
                             st.markdown("<h1 style='text-align: center;'>🙂</h1>", unsafe_allow_html=True)
                             st.warning(f"### Điểm của em: {grade}")
                             st.write("Em làm khá tốt, nhưng hãy nỗ lực hơn ở bài kiểm tra sau em nhé!")
-                            
-                        else: # Điểm trên 7
-                            st.balloons() 
-                            st.snow()     
+                        else:
+                            st.balloons(); st.snow()
                             st.markdown("<h1 style='text-align: center;'>🎉 😍 🎉</h1>", unsafe_allow_html=True)
                             st.success(f"### Điểm tuyệt vời: {grade}")
                             st.header("Chúc mừng em đã hoàn thành tốt bài kiểm tra, cố gắng giữ phong độ này em nhé!")
-
-                        # Xóa trạng thái để Reset phòng thi cho lần sau
+                        
                         del st.session_state[f"started_{ma_de_input}"]
-        else:
-            st.warning("🔎 Không tìm thấy mã đề này. Em hãy kiểm tra lại mã cô giáo giao nhé!")
+        else: st.warning("🔎 Không tìm thấy mã đề này!")
 
 with tab_gv:
     pwd = st.text_input("🔐 Mật khẩu quản lý:", type="password")
