@@ -4,124 +4,150 @@ from supabase import create_client
 import pandas as pd
 import re
 
-# --- KẾT NỐI SUPABASE ---
+# --- KẾT NỐI HỆ THỐNG ---
 url = st.secrets["SUPABASE_URL"]
 key = st.secrets["SUPABASE_KEY"]
 supabase = create_client(url, key)
 
-st.set_page_config(page_title="Hệ Thống Thi Hà Giang V3", layout="wide")
+st.set_page_config(page_title="Hệ Thống Thi Online Lê Quý Đôn", layout="wide", page_icon="🏫")
 
-# --- HÀM XỬ LÝ WORD THÔNG MINH (TÁCH ĐÁP ÁN NGANG & DỌC) ---
-def parse_docx_pro(file):
+# Mật khẩu quản lý dành cho cô giáo (Bạn có thể đổi mật khẩu này tùy ý)
+ADMIN_PASSWORD = "141983" 
+
+# --- BỘ MÁY QUÉT ĐỀ THI CHUẨN XÁC ---
+def parse_docx_smart(file):
     doc = Document(file)
     questions = []
-    full_text_runs = []
+    full_text_with_marks = ""
     
-    # Gom tất cả các cụm chữ và giữ thông tin màu sắc
+    # Quét từng đoạn văn và đánh dấu chữ đỏ
     for para in doc.paragraphs:
+        para_text = ""
         for run in para.runs:
-            color = str(run.font.color.rgb) if run.font.color and run.font.color.rgb else "000000"
-            full_text_runs.append({"text": run.text, "color": color})
-        full_text_runs.append({"text": "\n", "color": "000000"})
+            # Nhận diện màu đỏ FF0000
+            if run.font.color and run.font.color.rgb and str(run.font.color.rgb) == "FF0000":
+                para_text += f" [[DUNG]]{run.text}[[HET]] "
+            else:
+                para_text += run.text
+        full_text_with_marks += para_text + "\n"
 
-    combined_text = ""
-    red_content = []
-    for item in full_text_runs:
-        if item["color"] == "FF0000":
-            # Đánh dấu nội dung đỏ bằng thẻ tạm
-            combined_text += f"[[RED]]{item['text']}[[ENDRED]]"
-        else:
-            combined_text += item["text"]
-
-    # Tách câu hỏi dựa trên chữ "Câu 1:", "Câu 2:"...
-    raw_questions = re.split(r'(?i)(Câu\s+\d+[:.])', combined_text)
+    # Tách các câu hỏi (Dựa trên từ khóa Câu 1, Câu 2...)
+    q_blocks = re.split(r'(?i)(Câu\s+\d+[:.])', full_text_with_marks)
     
-    for i in range(1, len(raw_questions), 2):
-        q_header = raw_questions[i]
-        q_body = raw_questions[i+1]
+    for i in range(1, len(q_blocks), 2):
+        header = q_blocks[i].strip()
+        content = q_blocks[i+1]
         
-        # Tách đáp án A, B, C, D kể cả khi nằm cùng dòng
-        options = re.split(r'(?i)([A-D]\s*[:.])', q_body)
+        # Tách 4 phương án A, B, C, D kể cả nằm ngang
+        parts = re.split(r'(?i)\b([A-D]\s*[:.])', content)
         
-        q_text = options[0].replace("[[RED]]", "").replace("[[ENDRED]]", "").strip()
-        current_options = []
-        correct_answer = ""
+        question_text = parts[0].replace("[[DUNG]]", "").replace("[[HET]]", "").strip()
+        options_list = []
+        final_answer = ""
         
-        for j in range(1, len(options), 2):
-            opt_label = options[j].strip().upper()[0] # Lấy A, B, C hoặc D
-            opt_text = options[j+1].strip()
+        # Nhặt các đáp án
+        for j in range(1, len(parts), 2):
+            label = parts[j].strip().upper()[0] # Lấy chữ A, B, C hoặc D
+            text = parts[j+1].strip()
             
-            # Kiểm tra xem trong cụm đáp án này có chứa thẻ đỏ không
-            if "[[RED]]" in opt_text:
-                correct_answer = opt_label
+            # Nếu trong text có chứa dấu hiệu chữ đỏ
+            if "[[DUNG]]" in text:
+                final_answer = label
             
-            # Làm sạch thẻ đỏ trước khi lưu
-            clean_opt = opt_text.replace("[[RED]]", "").replace("[[ENDRED]]", "").strip()
-            current_options.append(f"{opt_label}. {clean_opt}")
-            
-        if q_header and current_options:
+            clean_text = text.replace("[[DUNG]]", "").replace("[[HET]]", "").strip()
+            if clean_text:
+                options_list.append(f"{label}. {clean_text}")
+        
+        # Chỉ lấy những câu có đủ đáp án
+        if options_list:
             questions.append({
-                "question": f"{q_header} {q_text}",
-                "options": current_options,
-                "answer": correct_answer
+                "question": f"{header} {question_text}",
+                "options": options_list,
+                "answer": final_answer
             })
     return questions
 
 # --- GIAO DIỆN ---
-st.title("🏔️ Hệ Thống Quản Lý Thi Đa Mã Đề")
+st.title("🏫 Hệ Thống Thi Trắc Nghiệm Trực Tuyến")
+st.markdown("*Dành cho học sinh trường Lê Quý Đôn - Hà Giang*")
 
-tab_gv, tab_hs = st.tabs(["👩‍🏫 Quản lý của Giáo viên", "👨‍🎓 Phòng thi Học sinh"])
+tab_hs, tab_gv = st.tabs(["👨‍🎓 PHÒNG THI HỌC SINH", "👩‍🏫 QUẢN LÝ GIÁO VIÊN"])
 
-with tab_gv:
-    c1, c2 = st.columns([1, 1.5])
-    with c1:
-        st.subheader("📤 Tải lên nhiều mã đề")
-        ma_de_input = st.text_input("Nhập mã đề (ví dụ: 101, 102...):")
-        file = st.file_uploader("Chọn file Word:", type=["docx"])
-        if st.button("Kích hoạt mã đề này"):
-            if ma_de_input and file:
-                data = parse_docx_pro(file)
-                supabase.table("exam_questions").upsert({"ma_de": ma_de_input, "nội_dung_json": data}).execute()
-                st.success(f"Đã kích hoạt mã đề {ma_de_input}!")
-
-    with c2:
-        st.subheader("📊 Kết quả tổng hợp")
-        # Lấy tất cả kết quả từ Supabase
-        all_res = supabase.table("student_results").select("*").execute()
-        if all_res.data:
-            df = pd.DataFrame(all_res.data)
-            # Bộ lọc mã đề
-            list_ma = ["Tất cả"] + sorted(df['ma_de'].unique().tolist())
-            loc_ma = st.selectbox("Lọc kết quả theo mã đề:", list_ma)
-            
-            df_filter = df if loc_ma == "Tất cả" else df[df['ma_de'] == loc_ma]
-            st.dataframe(df_filter[["ma_de", "ho_ten", "lop", "diem", "created_at"]], use_container_width=True)
-            
-            st.download_button("📥 Tải bảng điểm này", df_filter.to_csv(index=False, encoding='utf-8-sig'), "ket_qua.csv")
-
+# --- TAB HỌC SINH (Mặc định mở tab này để các em vào làm luôn) ---
 with tab_hs:
-    st.subheader("📝 Học sinh làm bài")
-    ma_thi = st.text_input("Nhập mã đề thi được giao:")
-    if ma_thi:
-        res_de = supabase.table("exam_questions").select("nội_dung_json").eq("ma_de", ma_thi).execute()
-        if res_de.data:
-            quiz = res_de.data[0]["nội_dung_json"]
-            with st.form("thi_form"):
-                col_a, col_b = st.columns(2)
-                ten = col_a.text_input("Họ và tên:"); lp = col_b.text_input("Lớp:")
+    ma_de_thi = st.text_input("🔑 Nhập Mã đề thi cô giáo giao (Ví dụ: 001, 002...):")
+    if ma_de_thi:
+        res = supabase.table("exam_questions").select("nội_dung_json").eq("ma_de", ma_de_thi).execute()
+        if res.data:
+            quiz = res.data[0]["nội_dung_json"]
+            with st.form("quiz_form"):
+                c1, c2 = st.columns(2)
+                name = c1.text_input("Họ và Tên học sinh:")
+                class_name = c2.text_input("Lớp:")
                 st.write("---")
-                ans = {}
-                for idx, item in enumerate(quiz):
-                    st.write(f"**{item['question']}**")
-                    # Hiển thị đáp án (đã sạch màu đỏ)
-                    ans[idx] = st.radio(f"Chọn câu trả lời cho câu {idx+1}:", item['options'], key=f"q_{idx}", label_visibility="collapsed")
+                
+                user_selections = {}
+                for idx, q in enumerate(quiz):
+                    st.write(f"**{q['question']}**")
+                    # Radio không có giá trị mặc định để tránh tự chọn A
+                    user_selections[idx] = st.radio(
+                        "Chọn đáp án đúng:", 
+                        q['options'], 
+                        index=None, # Ép không chọn sẵn cái nào cả
+                        key=f"quiz_{idx}",
+                        label_visibility="collapsed"
+                    )
                     st.write("")
                 
-                if st.form_submit_button("NỘP BÀI"):
-                    if ten and lp:
-                        dung = sum(1 for i, q in enumerate(quiz) if ans[i].startswith(q['answer']))
-                        diem = round((dung/len(quiz))*10, 2)
-                        supabase.table("student_results").insert({"ma_de": ma_thi, "ho_ten": ten, "lop": lp, "diem": diem}).execute()
-                        st.balloons(); st.success(f"Kết quả của {ten}: {diem} điểm.")
-                    else: st.error("Điền tên và lớp nhé!")
-        else: st.error("Mã đề không tồn tại!")
+                if st.form_submit_button("NỘP BÀI THI"):
+                    if name and class_name and all(v is not None for v in user_selections.values()):
+                        correct_num = sum(1 for i, q in enumerate(quiz) if user_selections[i].startswith(q['answer']))
+                        grade = round((correct_num / len(quiz)) * 10, 2)
+                        
+                        supabase.table("student_results").insert({
+                            "ma_de": ma_de_thi, "ho_ten": name, "lop": class_name, "diem": grade
+                        }).execute()
+                        
+                        st.balloons()
+                        st.success(f"Chúc mừng {name}! Em đã hoàn thành bài thi với {grade} điểm.")
+                    else:
+                        st.error("⚠️ Em hãy nhập đủ thông tin và chọn ĐẦY ĐỦ các câu trả lời nhé!")
+        else:
+            st.warning("Mã đề này chưa có trên hệ thống, em hãy kiểm tra lại!")
+
+# --- TAB GIÁO VIÊN (CẦN MẬT KHẨU) ---
+with tab_gv:
+    pwd = st.text_input("🔐 Nhập mật khẩu quản lý để tiếp tục:", type="password")
+    if pwd == ADMIN_PASSWORD:
+        st.success("Xác thực thành công. Chào cô giáo!")
+        col1, col2 = st.columns([1, 1.5])
+        
+        with col1:
+            st.subheader("📤 Đăng đề thi mới")
+            new_ma = st.text_input("Đặt mã đề mới:")
+            word_file = st.file_uploader("Tải đề Word (Chữ đỏ là đáp án):", type=["docx"])
+            if st.button("Kích hoạt đề online"):
+                if new_ma and word_file:
+                    with st.spinner("Đang xử lý dữ liệu..."):
+                        quiz_data = parse_docx_smart(word_file)
+                        supabase.table("exam_questions").upsert({"ma_de": new_ma, "nội_dung_json": quiz_data}).execute()
+                        st.success(f"Đã lưu xong {len(quiz_data)} câu hỏi cho mã đề {new_ma}")
+        
+        with col2:
+            st.subheader("📊 Kết quả và Bảng điểm")
+            all_data = supabase.table("student_results").select("*").execute()
+            if all_data.data:
+                df = pd.DataFrame(all_data.data)
+                list_m_de = ["Tất cả"] + sorted(df['ma_de'].unique().tolist())
+                sel_ma = st.selectbox("Lọc theo mã đề:", list_m_de)
+                
+                final_df = df if sel_ma == "Tất cả" else df[df['ma_de'] == sel_ma]
+                st.dataframe(final_df[["ma_de", "ho_ten", "lop", "diem", "created_at"]], use_container_width=True)
+                
+                st.download_button("📥 Tải bảng điểm này", final_df.to_csv(index=False, encoding='utf-8-sig'), "Bang_diem.csv")
+                
+                if st.button("🔥 Xóa sạch kết quả để thi lại"):
+                    supabase.table("student_results").delete().neq("id", 0).execute()
+                    st.rerun()
+    elif pwd != "":
+        st.error("Mật khẩu sai rồi bạn hiền ơi!")
