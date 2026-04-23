@@ -6,7 +6,7 @@ import re
 from datetime import datetime
 import pytz
 import io
-import plotly.express as px # Thư viện vẽ biểu đồ
+import plotly.express as px
 
 # --- KẾT NỐI HỆ THỐNG ---
 url = st.secrets["SUPABASE_URL"]
@@ -47,73 +47,91 @@ def parse_docx_smart(file):
     return questions
 
 # --- GIAO DIỆN ---
-st.title("🏫 Hệ Thống Thi Trực Tuyến & Thống Kê Điểm Số")
+st.title("🏫 Hệ Thống Quản Lý Thi & Thống Kê Chuyên Sâu")
 tab_hs, tab_gv = st.tabs(["👨‍🎓 PHÒNG THI HỌC SINH", "👩‍🏫 QUẢN LÝ GIÁO VIÊN"])
 
 with tab_hs:
     ma_de_thi = st.text_input("🔑 Nhập Mã đề thi:")
     if ma_de_thi:
-        res = supabase.table("exam_questions").select("nội_dung_json").eq("ma_de", ma_de_thi).execute()
+        res = supabase.table("exam_questions").select("*").eq("ma_de", ma_de_thi).execute()
         if res.data:
-            quiz = res.data[0]["nội_dung_json"]
+            exam_info = res.data[0]
+            quiz = exam_info["nội_dung_json"]
+            st.info(f"📋 **Lớp:** {exam_info.get('ten_lop', 'Chưa rõ')} | **Ngày kiểm tra:** {exam_info.get('ngay_thi', 'Chưa rõ')}")
+            
             with st.form("quiz_form"):
                 c1, c2 = st.columns(2)
                 name = c1.text_input("Họ và Tên học sinh:")
-                class_name = c2.text_input("Lớp:")
+                class_name = c2.text_input("Lớp thực tế (ví dụ: 10A1):")
+                st.write("---")
                 user_selections = {idx: st.radio(f"**{q['question']}**", q['options'], index=None, key=f"q_{idx}") for idx, q in enumerate(quiz)}
+                
                 if st.form_submit_button("NỘP BÀI THI", use_container_width=True):
                     if name and class_name:
                         correct_num = sum(1 for i, q in enumerate(quiz) if user_selections[i] and user_selections[i].startswith(q['answer']))
-                        grade = round((correct_num / len(quiz)) * 10, 2)
-                        supabase.table("student_results").insert({"ma_de": ma_de_thi, "ho_ten": name, "lop": class_name, "diem": grade}).execute()
+                        total_q = len(quiz)
+                        grade = round((correct_num / total_q) * 10, 2)
+                        
+                        supabase.table("student_results").insert({
+                            "ma_de": ma_de_thi, "ho_ten": name, "lop": class_name, 
+                            "diem": grade, "so_cau_dung": f"{correct_num}/{total_q}"
+                        }).execute()
+                        
                         st.balloons()
-                        st.success(f"Kết quả của {name.upper()}: {grade} điểm")
+                        st.success(f"Kết quả của {name.upper()}: {grade} điểm (Đúng {correct_num}/{total_q} câu)")
                     else: st.error("⚠️ Điền tên và lớp nhé!")
         else: st.warning("Mã đề không tồn tại!")
 
 with tab_gv:
-    pwd = st.text_input("🔐 Nhập mật khẩu quản lý:", type="password")
+    pwd = st.text_input("🔐 Mật khẩu quản lý:", type="password")
     if pwd == ADMIN_PASSWORD:
-        st.success("Chào cô giáo!")
         col1, col2 = st.columns([1, 2])
         with col1:
             st.subheader("📤 Đăng đề mới")
-            new_ma = st.text_input("Mã đề:")
+            new_ma = st.text_input("Đặt mã đề:")
+            ten_lop = st.text_input("Đề kiểm tra cho lớp:")
+            ngay_thi = st.date_input("Ngày kiểm tra:", value=datetime.now())
             word_file = st.file_uploader("Tải đề Word:", type=["docx"])
             if st.button("Kích hoạt đề"):
                 if new_ma and word_file:
-                    supabase.table("exam_questions").upsert({"ma_de": new_ma, "nội_dung_json": parse_docx_smart(word_file)}).execute()
-                    st.success("Đã tải xong!")
+                    data = parse_docx_smart(word_file)
+                    supabase.table("exam_questions").upsert({
+                        "ma_de": new_ma, "nội_dung_json": data, 
+                        "ten_lop": ten_lop, "ngay_thi": ngay_thi.strftime("%d/%m/%Y")
+                    }).execute()
+                    st.success("Kích hoạt thành công!")
+            
+            st.divider()
+            if st.button("🔥 Xóa tất cả kết quả thi", help="Cân nhắc trước khi xóa! Hãy tải Excel trước."):
+                supabase.table("student_results").delete().neq("id", 0).execute()
+                st.toast("Đã dọn dẹp sạch kết quả!")
+                st.rerun()
+
         with col2:
-            st.subheader("📊 Thống kê & Bảng điểm")
-            all_data = supabase.table("student_results").select("*").execute()
-            if all_data.data:
-                df = pd.DataFrame(all_data.data)
+            st.subheader("📊 Báo cáo & Bảng điểm")
+            all_res = supabase.table("student_results").select("*").execute()
+            if all_res.data:
+                df = pd.DataFrame(all_res.data)
                 df['created_at'] = df['created_at'].apply(format_vietnam_time)
-                # Tự động lọc & xếp theo mã đề
-                df = df.sort_values(by=['ma_de', 'ho_ten'])
                 
-                sel_ma = st.selectbox("Xem bảng điểm mã đề:", ["Tất cả"] + sorted(df['ma_de'].unique().tolist()))
+                sel_ma = st.selectbox("Lọc mã đề:", ["Tất cả"] + sorted(df['ma_de'].unique().tolist()))
                 final_df = df if sel_ma == "Tất cả" else df[df['ma_de'] == sel_ma]
                 
-                # Hiển thị biểu đồ
-                fig = px.histogram(final_df, x="diem", nbins=10, title=f"Phân phối điểm số - Mã đề: {sel_ma}", 
-                                   labels={'diem':'Điểm số', 'count':'Số lượng học sinh'}, color_discrete_sequence=['#28a745'])
+                # Biểu đồ
+                fig = px.histogram(final_df, x="diem", nbins=10, title=f"Phân phối điểm - {sel_ma}", color_discrete_sequence=['#17a2b8'])
                 st.plotly_chart(fig, use_container_width=True)
 
-                st.dataframe(final_df[["ma_de", "ho_ten", "lop", "diem", "created_at"]].rename(columns={"created_at": "Thời gian nộp"}), use_container_width=True)
+                show_cols = ["ma_de", "ho_ten", "lop", "so_cau_dung", "diem", "created_at"]
+                st.dataframe(final_df[show_cols].rename(columns={"created_at": "Thời gian nộp", "so_cau_dung": "Đúng/Tổng"}), use_container_width=True)
 
-                # --- XUẤT FILE EXCEL ĐẸP ---
+                # Xuất Excel
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                    final_df[["ma_de", "ho_ten", "lop", "diem", "created_at"]].to_excel(writer, index=False, sheet_name='BangDiem')
+                    final_df[show_cols].to_excel(writer, index=False, sheet_name='KetQua')
                     workbook = writer.book
-                    worksheet = writer.sheets['BangDiem']
-                    # Trang trí
-                    header_format = workbook.add_format({'bold': True, 'bg_color': '#D7E4BC', 'border': 1})
-                    for col_num, value in enumerate(final_df[["ma_de", "ho_ten", "lop", "diem", "created_at"]].columns.values):
-                        worksheet.write(0, col_num, value, header_format)
-                    worksheet.set_column('A:E', 20)
+                    worksheet = writer.sheets['KetQua']
+                    h_format = workbook.add_format({'bold': True, 'bg_color': '#D7E4BC', 'border': 1})
+                    for c_num, val in enumerate(show_cols): worksheet.write(0, c_num, val, h_format)
+                    worksheet.set_column('A:F', 20)
                 
-                st.download_button(label="📥 Tải Bảng Điểm Excel (XLSX)", data=output.getvalue(), 
-                                   file_name=f"Bang_diem_{sel_ma}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                st.download_button("📥 Tải Báo Cáo Excel", data=output.getvalue(), file_name=f"Bao_cao_{sel_ma}.xlsx")
