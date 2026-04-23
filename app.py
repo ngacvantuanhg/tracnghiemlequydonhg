@@ -21,7 +21,7 @@ ADMIN_PASSWORD = "141983"
 # Link chuẩn xác dựa trên GitHub của bạn
 bg_img = "https://raw.githubusercontent.com/ngacvantuanhg/tracnghiemlequydonhg/main/Anhnen.png"
 
-# --- STYLE GIAO DIỆN NAVY & WHITE CĂN GIỮA ---
+# --- STYLE GIAO DIỆN V20: Ô NHẬP LIỆU TRẮNG SÁNG ---
 st.markdown(f"""
     <style>
     /* Hình nền toàn trang */
@@ -29,54 +29,64 @@ st.markdown(f"""
         background-image: url("{bg_img}");
         background-attachment: fixed;
         background-size: cover;
+        background-position: center;
     }}
 
-    /* Lớp phủ trắng mờ để nội dung dễ đọc */
+    /* Lớp phủ để nội dung nổi bật */
     .main {{
-        background-color: rgba(255, 255, 255, 0.9);
+        background-color: rgba(255, 255, 255, 0.8);
         padding: 2rem;
         border-radius: 20px;
     }}
 
-    /* Căn giữa tiêu đề */
-    h1 {{ color: #1e3a8a; text-align: center !important; font-family: 'Helvetica Neue', sans-serif; font-weight: 800; }}
-    .sub-title {{ text-align: center !important; color: #1e40af; font-weight: 500; margin-bottom: 30px; font-size: 1.2em; }}
+    /* CĂN GIỮA TIÊU ĐỀ */
+    h1, .sub-title {{
+        text-align: center !important;
+        color: #1e3a8a !important;
+    }}
+
+    /* LÀM TRẮNG CÁC Ô NHẬP LIỆU (INPUT BOX) */
+    input, div[data-baseweb="input"], div[data-baseweb="select"], .stTextArea textarea {{
+        background-color: #ffffff !important;
+        color: #1e3a8a !important;
+        border: 1px solid #cbd5e1 !important;
+        border-radius: 8px !important;
+    }}
     
-    /* Căn giữa Tabs */
-    .stTabs [data-baseweb="tab-list"] {{ justify-content: center; }}
-    .stTabs [data-baseweb="tab"] {{ font-weight: bold; }}
+    /* Hiệu ứng khi click vào ô nhập liệu */
+    input:focus {{
+        border: 2px solid #1e3a8a !important;
+        box-shadow: 0 0 5px rgba(30, 58, 138, 0.2) !important;
+    }}
 
     /* Căn giữa và làm gọn Form */
     [data-testid="stForm"] {{
+        background-color: rgba(255, 255, 255, 0.95);
         border: 2px solid #1e3a8a;
         border-radius: 15px;
-        background-color: white;
-        max-width: 850px;
-        margin: 0 auto !important; /* QUAN TRỌNG: Căn giữa khối Form */
         padding: 2rem;
-    }}
-
-    /* Căn giữa các đoạn text markdown */
-    .stMarkdown, .stSubheader, p {{ text-align: center !important; }}
-
-    /* Đồng hồ Navy cố định */
-    .timer-box {{ 
-        position: fixed; top: 20px; right: 20px; padding: 10px 20px; 
-        background: #1e3a8a; color: white; border-radius: 10px;
-        z-index: 9999; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        max-width: 850px;
+        margin: 0 auto !important;
     }}
 
     /* Nút bấm Navy căn giữa */
-    .stButton>button {{ 
-        background-color: #1e3a8a; color: white; border-radius: 30px; 
-        padding: 0.7rem 3rem; font-weight: 600; 
-        display: block; margin: 0 auto !important; /* Căn giữa nút */
+    .stButton>button {{
+        display: block;
+        margin: 0 auto !important;
+        background-color: #1e3a8a;
+        color: white;
+        border-radius: 30px;
+        padding: 10px 40px;
+        font-weight: bold;
     }}
-    .stButton>button:hover {{ background-color: #1e40af; transform: scale(1.03); }}
     
-    /* Căn lề radio button (đáp án) sang trái để dễ đọc nhưng khối vẫn ở giữa */
-    [data-testid="stMarkdownContainer"] p {{ text-align: left !important; }}
-    div[role="radiogroup"] {{ display: flex; flex-direction: column; align-items: flex-start; margin-left: 20%; }}
+    /* Đồng hồ đếm ngược Navy */
+    .timer-box {{ 
+        position: fixed; top: 20px; right: 20px; padding: 10px 20px; 
+        background: #1e3a8a; color: white; border-radius: 10px;
+        z-index: 1000; text-align: center;
+    }}
     </style>
     """, unsafe_allow_html=True)
 
