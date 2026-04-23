@@ -106,13 +106,18 @@ with tab_hs:
                         )
                     
                     st.write("---")
-                    if st.form_submit_button("📤 NỘP BÀI THI", use_container_width=True):
-                        # Tính điểm
-                        correct_num = sum(1 for i, q in enumerate(quiz) if user_selections[i] and user_selections[i].startswith(q['answer']))
+                    # --- ĐOẠN XỬ LÝ NỘP BÀI CẢM XÚC V15 ---
+                if st.form_submit_button("📤 NỘP BÀI THI", use_container_width=True):
+                    if not st.session_state[f"student_name_{ma_de_input}"] or not st.session_state[f"student_class_{ma_de_input}"]:
+                        st.error("⚠️ Em cần điền tên và lớp nhé!")
+                    else:
+                        # 1. TÍNH TOÁN DỮ LIỆU
+                        da_lam = sum(1 for v in user_selections.values() if v is not None)
                         total_q = len(quiz)
+                        correct_num = sum(1 for i, q in enumerate(quiz) if user_selections[i] and user_selections[i].startswith(q['answer']))
                         grade = round((correct_num / total_q) * 10, 2)
-                        
-                        # Lưu vào Database
+
+                        # 2. LƯU VÀO DATABASE
                         supabase.table("student_results").insert({
                             "ma_de": ma_de_input, 
                             "ho_ten": st.session_state[f"student_name_{ma_de_input}"], 
@@ -122,10 +127,31 @@ with tab_hs:
                             "lop_thi": exam_info.get('ten_lop'), 
                             "ngay_thi": exam_info.get('ngay_thi')
                         }).execute()
-                        
-                        st.balloons()
-                        st.success(f"🎉 Chúc mừng em đã hoàn thành bài thi! Điểm của em là: {grade}")
-                        # Reset trạng thái để có thể thi đề khác nếu muốn
+
+                        # 3. HIỂN THỊ CẢNH BÁO NẾU CHƯA LÀM HẾT
+                        if da_lam < total_q:
+                            st.warning(f"🔔 Em đã nộp bài thành công, nhưng lưu ý là em mới chỉ làm {da_lam}/{total_q} câu thôi nhé!")
+
+                        # 4. GIAO DIỆN KẾT QUẢ THEO ĐIỂM SỐ
+                        st.markdown("---")
+                        if grade < 5:
+                            st.markdown("<h1 style='text-align: center;'>😔</h1>", unsafe_allow_html=True)
+                            st.error(f"### Điểm của em: {grade}")
+                            st.info("Em hãy cố gắng ở bài kiểm tra sau nhé, cô tin em sẽ làm được!")
+                            
+                        elif 5 <= grade <= 7:
+                            st.markdown("<h1 style='text-align: center;'>🙂</h1>", unsafe_allow_html=True)
+                            st.warning(f"### Điểm của em: {grade}")
+                            st.write("Em làm khá tốt, nhưng hãy nỗ lực hơn ở bài kiểm tra sau em nhé!")
+                            
+                        else: # Điểm trên 7
+                            st.balloons() 
+                            st.snow()     
+                            st.markdown("<h1 style='text-align: center;'>🎉 😍 🎉</h1>", unsafe_allow_html=True)
+                            st.success(f"### Điểm tuyệt vời: {grade}")
+                            st.header("Chúc mừng em đã hoàn thành tốt bài kiểm tra, cố gắng giữ phong độ này em nhé!")
+
+                        # Xóa trạng thái để Reset phòng thi cho lần sau
                         del st.session_state[f"started_{ma_de_input}"]
         else:
             st.warning("🔎 Không tìm thấy mã đề này. Em hãy kiểm tra lại mã cô giáo giao nhé!")
