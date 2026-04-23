@@ -3,153 +3,108 @@ from docx import Document
 from groq import Groq
 import json
 
-# --- 1. CẤU HÌNH TRANG ---
-st.set_page_config(page_title="Thi Trắc Nghiệm Địa Lý", page_icon="📝", layout="wide")
+# --- CẤU HÌNH ---
+st.set_page_config(page_title="Hệ Thống Thi Trắc Nghiệm Lê Quý Đôn", page_icon="📝", layout="wide")
 
-# Khởi tạo bộ nhớ tạm (Session State)
 if "quiz_data" not in st.session_state:
     st.session_state.quiz_data = []
-if "score" not in st.session_state:
-    st.session_state.score = 0
-if "current_question" not in st.session_state:
-    st.session_state.current_question = 0
 if "quiz_started" not in st.session_state:
     st.session_state.quiz_started = False
-if "answered" not in st.session_state:
-    st.session_state.answered = False
+if "ma_de_chuan" not in st.session_state:
+    st.session_state.ma_de_chuan = ""
 
-# Lấy chìa khóa Groq (Nhớ cài trong Settings > Secrets của Streamlit nhé)
-try:
-    api_key = st.secrets["GROQ_API_KEY"]
-except KeyError:
-    st.error("⚠️ Chưa có API Key của Groq. Vui lòng cài đặt trong phần Secrets!")
-    api_key = None
+api_key = st.secrets["GROQ_API_KEY"]
 
-# --- 2. HÀM XỬ LÝ (TRỢ LÝ AI ĐỌC FILE) ---
-def parse_word_doc(file):
-    """Đọc chữ từ file Word"""
+# --- HÀM ĐỌC FILE WORD (NHẬN DIỆN CHỮ ĐỎ) ---
+def parse_word_with_colors(file):
     doc = Document(file)
-    full_text = [para.text.strip() for para in doc.paragraphs if para.text.strip()]
-    return "\n".join(full_text)
+    content = []
+    for para in doc.paragraphs:
+        text_parts = []
+        for run in para.runs:
+            # Kiểm tra nếu chữ có màu đỏ (Color hex: FF0000)
+            if run.font.color and run.font.color.rgb and str(run.font.color.rgb) == "FF0000":
+                text_parts.append(f"[DAP_AN_DUNG]{run.text}[/DAP_AN_DUNG]")
+            else:
+                text_parts.append(run.text)
+        
+        full_para_text = "".join(text_parts).strip()
+        if full_para_text:
+            content.append(full_para_text)
+    return "\n".join(content)
 
-def generate_quiz_from_text(text):
-    """Nhờ AI đọc hiểu văn bản và bóc tách thành dạng bảng câu hỏi chuẩn"""
+# --- NHỜ AI BÓC TÁCH DỮ LIỆU ---
+def generate_quiz_ai(text):
     client = Groq(api_key=api_key)
     prompt = f"""
-    Bạn là một chuyên gia giáo dục. Hãy đọc bộ đề thi sau đây và trích xuất thành định dạng JSON chuẩn.
-    BẮT BUỘC trả về một đối tượng JSON có cấu trúc như sau:
-    {{
-        "questions": [
-            {{
-                "question": "Nội dung câu hỏi?",
-                "options": ["A. Đáp án 1", "B. Đáp án 2", "C. Đáp án 3", "D. Đáp án 4"],
-                "answer": "A", 
-                "explanation": "Giải thích ngắn gọn tại sao đáp án này đúng."
-            }}
-        ]
-    }}
+    Bạn là trợ lý số hóa đề thi. Hãy trích xuất câu hỏi từ văn bản dưới đây.
+    QUY TẮC QUAN TRỌNG: 
+    1. Đáp án đúng là cụm từ nằm trong thẻ [DAP_AN_DUNG]...[/DAP_AN_DUNG]. Hãy lấy đó làm đáp án chuẩn, KHÔNG TỰ GIẢI.
+    2. Phải trích xuất ĐẦY ĐỦ TẤT CẢ câu hỏi có trong văn bản, không được bỏ sót bất kỳ câu nào.
     
-    Nội dung file Word giáo viên tải lên:
+    Xuất ra định dạng JSON mảng 'questions':
+    [
+      {{"question": "...", "options": ["A.","B.","C.","D."], "answer": "Chữ cái A hoặc B hoặc C hoặc D", "explanation": "Giải thích dựa trên đáp án đỏ"}}
+    ]
+    
+    Nội dung:
     {text}
     """
     
     response = client.chat.completions.create(
         model="meta-llama/llama-4-scout-17b-16e-instruct",
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.1, # Hạ nhiệt độ xuống thấp nhất để AI không tự bịa thêm
-        response_format={"type": "json_object"} # Bắt buộc xuất ra JSON
+        temperature=0, # Chính xác tuyệt đối
+        response_format={"type": "json_object"}
     )
-    
-    result = json.loads(response.choices[0].message.content)
-    return result.get("questions", [])
+    return json.loads(response.choices[0].message.content).get("questions", [])
 
-# --- 3. GIAO DIỆN CHÍNH ---
-st.title("📝 Hệ Thống Thi Trắc Nghiệm Tương Tác")
-st.markdown("*Trường THCS Lê Quý Đôn - Môn Địa Lý*")
-st.markdown("---")
+# --- GIAO DIỆN ---
+st.title("📝 Hệ Thống Thi Trắc Nghiệm Địa Lý")
 
-# --- KHU VỰC DÀNH CHO GIÁO VIÊN (SIDEBAR) ---
-with st.sidebar:
-    st.header("👩‍🏫 Khu vực Giáo viên")
-    st.info("Cô giáo tải file Word (.docx) chứa bộ câu hỏi lên đây để hệ thống tự động tạo đề thi online.")
-    
-    uploaded_file = st.file_uploader("Tải file Word lên", type=["docx"])
-    
-    if uploaded_file and api_key:
-        if st.button("🚀 Xây dựng Đề Thi Online", use_container_width=True):
-            with st.spinner("AI đang đọc file Word và tạo đề thi..."):
-                try:
-                    raw_text = parse_word_doc(uploaded_file)
-                    questions = generate_quiz_from_text(raw_text)
-                    
-                    if questions:
-                        # Reset lại bài thi mới
-                        st.session_state.quiz_data = questions
-                        st.session_state.quiz_started = True
-                        st.session_state.current_question = 0
-                        st.session_state.score = 0
-                        st.session_state.answered = False
-                        st.success(f"Đã tạo thành công {len(questions)} câu hỏi!")
-                    else:
-                        st.error("Không tìm thấy câu hỏi nào trong file. Vui lòng kiểm tra lại!")
-                except Exception as e:
-                    st.error(f"Có lỗi khi xử lý file: {e}")
+# TAB GIÁO VIÊN & HỌC SINH
+tab_gv, tab_hs = st.tabs(["👩‍🏫 Dành cho Giáo viên", "👨‍🎓 Dành cho Học sinh"])
 
-# --- KHU VỰC DÀNH CHO HỌC SINH (MÀN HÌNH CHÍNH) ---
-if st.session_state.quiz_started and st.session_state.quiz_data:
-    q_idx = st.session_state.current_question
-    total_q = len(st.session_state.quiz_data)
+with tab_gv:
+    st.subheader("Thiết lập đề thi")
+    ma_de_input = st.text_input("1. Đặt mã đề thi (Ví dụ: DIA101, DE01...):")
+    file_word = st.file_uploader("2. Tải file Word (Đáp án đúng bôi đỏ chữ):", type=["docx"])
     
-    # Thanh tiến trình bài làm
-    progress = (q_idx) / total_q
-    st.progress(progress)
-    st.write(f"**Câu {q_idx + 1} / {total_q}** (Điểm hiện tại: {st.session_state.score})")
-    
-    # Lấy câu hỏi hiện tại
-    current_q = st.session_state.quiz_data[q_idx]
-    
-    # Hiển thị nội dung câu hỏi
-    st.subheader(current_q["question"])
-    
-    # Form để chọn đáp án (Tránh trang bị load lại liên tục)
-    with st.form(key=f"quiz_form_{q_idx}"):
-        user_choice = st.radio("Chọn một đáp án:", current_q["options"])
-        submit_btn = st.form_submit_button("Nộp câu trả lời")
-        
-        if submit_btn:
-            st.session_state.answered = True
-            # Kiểm tra đúng sai (Lấy chữ cái đầu tiên A, B, C, D để so sánh)
-            correct_letter = current_q["answer"].strip().upper()[0]
-            user_letter = user_choice.strip().upper()[0]
-            
-            if user_letter == correct_letter:
-                st.success("✅ Tuyệt vời! Em đã trả lời chính xác.")
-                st.session_state.score += 1
-            else:
-                st.error(f"❌ Tiếc quá! Đáp án đúng phải là: {current_q['answer']}")
-            
-            # Hiện phần giải thích của AI
-            st.info(f"💡 **Giải thích:** {current_q.get('explanation', 'Không có giải thích thêm.')}")
-
-    # Nút chuyển câu hỏi (Chỉ hiện khi đã nộp câu trả lời)
-    if st.session_state.answered:
-        if q_idx + 1 < total_q:
-            if st.button("Tiếp tục ➡️", type="primary"):
-                st.session_state.current_question += 1
-                st.session_state.answered = False
-                st.rerun()
+    if st.button("Xây dựng đề thi online"):
+        if ma_de_input and file_word:
+            with st.spinner("Đang quét đáp án đỏ và tạo đề..."):
+                raw_text = parse_word_with_colors(file_word)
+                st.session_state.quiz_data = generate_quiz_ai(raw_text)
+                st.session_state.ma_de_chuan = ma_de_input
+                st.success(f"Đã tạo xong đề {ma_de_input} với {len(st.session_state.quiz_data)} câu hỏi!")
         else:
-            st.markdown("---")
-            st.header("🎉 CHÚC MỪNG EM ĐÃ HOÀN THÀNH BÀI THI!")
-            st.subheader(f"🏆 Tổng điểm: {st.session_state.score} / {total_q}")
-            st.balloons()
-            
-            if st.button("🔄 Làm lại bài thi"):
-                st.session_state.current_question = 0
-                st.session_state.score = 0
-                st.session_state.answered = False
-                st.rerun()
+            st.warning("Vui lòng nhập mã đề và tải file!")
 
-else:
-    # Màn hình chờ khi chưa tải đề
-    st.info("👈 Cô giáo vui lòng tải bộ đề thi (File Word) ở menu bên trái để bắt đầu!")
+with tab_hs:
+    if not st.session_state.quiz_data:
+        st.info("Hiện chưa có đề thi nào được kích hoạt.")
+    else:
+        ma_nhap = st.text_input("Nhập mã đề thi để bắt đầu làm bài:")
+        if ma_nhap == st.session_state.ma_de_chuan:
+            st.success("Mã đề chính xác! Mời em làm bài.")
+            
+            # Hiển thị danh sách câu hỏi làm bài tập tập trung
+            score = 0
+            with st.form("quiz_form"):
+                user_answers = {}
+                for idx, q in enumerate(st.session_state.quiz_data):
+                    st.write(f"**Câu {idx+1}: {q['question']}**")
+                    user_answers[idx] = st.radio(f"Chọn đáp án câu {idx+1}:", q['options'], key=f"radio_{idx}")
+                    st.markdown("---")
+                
+                if st.form_submit_button("Nộp bài và xem điểm"):
+                    st.balloons()
+                    for idx, q in enumerate(st.session_state.quiz_data):
+                        correct_letter = q['answer'].strip().upper()[0]
+                        if user_answers[idx].startswith(correct_letter):
+                            score += 1
+                    
+                    st.header(f"Kết quả: {score} / {len(st.session_state.quiz_data)}")
+                    st.write("Cô giáo dặn: Các em xem lại các câu sai để nhớ bài nhé!")
+        elif ma_nhap != "":
+            st.error("Mã đề không đúng, vui lòng hỏi lại cô giáo!")
