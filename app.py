@@ -52,31 +52,83 @@ st.title("🏫 Hệ Thống Báo Cáo Giáo Dục Trực Tuyến")
 tab_hs, tab_gv = st.tabs(["👨‍🎓 PHÒNG THI HỌC SINH", "👩‍🏫 KHU VỰC QUẢN LÝ GIÁO VIÊN"])
 
 with tab_hs:
-    ma_de_thi = st.text_input("🔑 Nhập Mã đề thi cô giáo giao:")
-    if ma_de_thi:
-        res = supabase.table("exam_questions").select("*").eq("ma_de", ma_de_thi).execute()
+    st.subheader("📝 PHÒNG THI TRỰC TUYẾN")
+    
+    # Tạo form nhập liệu ban đầu
+    with st.container(border=True):
+        c1, c2, c3 = st.columns([1, 2, 1])
+        with c2:
+            ma_de_input = st.text_input("🔑 Nhập Mã đề thi cô giáo giao:", placeholder="Ví dụ: 101, 002...")
+            
+    if ma_de_input:
+        res = supabase.table("exam_questions").select("*").eq("ma_de", ma_de_input).execute()
         if res.data:
             exam_info = res.data[0]
             quiz = exam_info["nội_dung_json"]
-            st.info(f"📋 **Lớp:** {exam_info.get('ten_lop')} | **Ngày kiểm tra:** {exam_info.get('ngay_thi')}")
             
-            with st.form("quiz_form"):
-                name = st.text_input("Họ và Tên học sinh:")
-                actual_class = st.text_input("Lớp (của em):")
-                user_selections = {idx: st.radio(f"**{q['question']}**", q['options'], index=None, key=f"q_{idx}") for idx, q in enumerate(quiz)}
+            # Hiển thị thông tin kỳ thi cho học sinh kiểm tra
+            st.success(f"✅ Đã tìm thấy đề thi: **Môn kiểm tra/Lớp:** {exam_info.get('ten_lop')} | **Ngày:** {exam_info.get('ngay_thi')}")
+            
+            # Khởi tạo trạng thái làm bài nếu chưa có
+            if f"started_{ma_de_input}" not in st.session_state:
+                st.session_state[f"started_{ma_de_input}"] = False
+
+            # Form điền thông tin cá nhân trước khi thi
+            if not st.session_state[f"started_{ma_de_input}"]:
+                with st.form("student_info_form"):
+                    col_a, col_b = st.columns(2)
+                    name = col_a.text_input("👤 Họ và Tên của em:", placeholder="Nguyễn Văn A")
+                    actual_class = col_b.text_input("🏫 Em học lớp nào:", placeholder="Ví dụ: 9A1, 8B2...")
+                    
+                    st.warning("⚠️ Lưu ý: Sau khi nhấn Bắt đầu, em hãy tập trung làm bài và không tải lại trang nhé!")
+                    
+                    if st.form_submit_button("🚀 BẮT ĐẦU LÀM BÀI", use_container_width=True):
+                        if name and actual_class:
+                            st.session_state[f"started_{ma_de_input}"] = True
+                            st.session_state[f"student_name_{ma_de_input}"] = name
+                            st.session_state[f"student_class_{ma_de_input}"] = actual_class
+                            st.rerun()
+                        else:
+                            st.error("❌ Em vui lòng điền đủ Họ tên và Lớp của mình nhé!")
+            
+            # Giao diện khi đã nhấn Bắt đầu làm bài
+            else:
+                st.info(f"👨‍🎓 Thí sinh: **{st.session_state[f'student_name_{ma_de_input}'].upper()}** | Lớp: **{st.session_state[f'student_class_{ma_de_input}']}**")
                 
-                if st.form_submit_button("NỘP BÀI THI", use_container_width=True):
-                    if name and actual_class:
+                with st.form("quiz_form"):
+                    user_selections = {}
+                    for idx, q in enumerate(quiz):
+                        user_selections[idx] = st.radio(
+                            f"**{q['question']}**", 
+                            q['options'], 
+                            index=None, 
+                            key=f"quiz_{ma_de_input}_{idx}"
+                        )
+                    
+                    st.write("---")
+                    if st.form_submit_button("📤 NỘP BÀI THI", use_container_width=True):
+                        # Tính điểm
                         correct_num = sum(1 for i, q in enumerate(quiz) if user_selections[i] and user_selections[i].startswith(q['answer']))
-                        grade = round((correct_num / len(quiz)) * 10, 2)
+                        total_q = len(quiz)
+                        grade = round((correct_num / total_q) * 10, 2)
+                        
+                        # Lưu vào Database
                         supabase.table("student_results").insert({
-                            "ma_de": ma_de_thi, "ho_ten": name, "lop": actual_class, 
-                            "diem": grade, "so_cau_dung": f"{correct_num}/{len(quiz)}",
-                            "lop_thi": exam_info.get('ten_lop'), "ngay_thi": exam_info.get('ngay_thi')
+                            "ma_de": ma_de_input, 
+                            "ho_ten": st.session_state[f"student_name_{ma_de_input}"], 
+                            "lop": st.session_state[f"student_class_{ma_de_input}"], 
+                            "diem": grade, 
+                            "so_cau_dung": f"{correct_num}/{total_q}",
+                            "lop_thi": exam_info.get('ten_lop'), 
+                            "ngay_thi": exam_info.get('ngay_thi')
                         }).execute()
-                        st.balloons(); st.success(f"Chúc mừng {name.upper()}! Em đã nộp bài thành công.")
-                    else: st.error("⚠️ Em cần điền tên và lớp nhé!")
-        else: st.warning("Mã đề không tồn tại!")
+                        
+                        st.balloons()
+                        st.success(f"🎉 Chúc mừng em đã hoàn thành bài thi! Điểm của em là: {grade}")
+                        # Reset trạng thái để có thể thi đề khác nếu muốn
+                        del st.session_state[f"started_{ma_de_input}"]
+        else:
+            st.warning("🔎 Không tìm thấy mã đề này. Em hãy kiểm tra lại mã cô giáo giao nhé!")
 
 with tab_gv:
     pwd = st.text_input("🔐 Mật khẩu quản lý:", type="password")
