@@ -3,6 +3,8 @@ from docx import Document
 from supabase import create_client
 import pandas as pd
 import re
+from datetime import datetime
+import pytz # Thư viện xử lý múi giờ
 
 # --- KẾT NỐI HỆ THỐNG ---
 url = st.secrets["SUPABASE_URL"]
@@ -11,52 +13,44 @@ supabase = create_client(url, key)
 
 st.set_page_config(page_title="Hệ Thống Thi Online Lê Quý Đôn", layout="wide", page_icon="🏫")
 
-# Mật khẩu mới bạn yêu cầu: 141983
 ADMIN_PASSWORD = "141983" 
+
+# --- HÀM CHUYỂN ĐỔI GIỜ VIỆT NAM ---
+def format_vietnam_time(utc_time_str):
+    try:
+        # Chuyển chuỗi thời gian từ Supabase thành đối tượng datetime
+        utc_dt = datetime.fromisoformat(utc_time_str.replace('Z', '+00:00'))
+        # Chuyển sang múi giờ Việt Nam
+        vn_tz = pytz.timezone('Asia/Ho_Chi_Minh')
+        vn_dt = utc_dt.astimezone(vn_tz)
+        return vn_dt.strftime("%H:%M:%S %d/%m/%Y")
+    except:
+        return utc_time_str
 
 # --- BỘ MÁY QUÉT ĐỀ THI ---
 def parse_docx_smart(file):
     doc = Document(file)
     questions = []
     full_text_with_marks = ""
-    
     for para in doc.paragraphs:
-        para_text = ""
-        for run in para.runs:
-            if run.font.color and run.font.color.rgb and str(run.font.color.rgb) == "FF0000":
-                para_text += f" [[DUNG]]{run.text}[[HET]] "
-            else:
-                para_text += run.text
+        para_text = "".join([f" [[DUNG]]{r.text}[[HET]] " if r.font.color and str(r.font.color.rgb) == "FF0000" else r.text for r in para.runs])
         full_text_with_marks += para_text + "\n"
 
     q_blocks = re.split(r'(?i)(Câu\s+\d+[:.])', full_text_with_marks)
-    
     for i in range(1, len(q_blocks), 2):
         header = q_blocks[i].strip()
-        content = q_blocks[i+1]
-        parts = re.split(r'(?i)\b([A-D]\s*[:.])', content)
-        
+        parts = re.split(r'(?i)\b([A-D]\s*[:.])', q_blocks[i+1])
         question_text = parts[0].replace("[[DUNG]]", "").replace("[[HET]]", "").strip()
         options_dict = {}
         final_answer = ""
-        
         for j in range(1, len(parts), 2):
             label = parts[j].strip().upper()[0]
-            text = parts[j+1].strip()
-            if "[[DUNG]]" in text:
-                final_answer = label
-            clean_text = text.replace("[[DUNG]]", "").replace("[[HET]]", "").strip()
-            if clean_text:
-                options_dict[label] = f"{label}. {clean_text}"
+            if "[[DUNG]]" in parts[j+1]: final_answer = label
+            options_dict[label] = f"{label}. {parts[j+1].replace('[[DUNG]]', '').replace('[[HET]]', '').strip()}"
         
         sorted_options = [options_dict[k] for k in sorted(options_dict.keys())]
-        
         if sorted_options:
-            questions.append({
-                "question": f"{header} {question_text}",
-                "options": sorted_options,
-                "answer": final_answer
-            })
+            questions.append({"question": f"{header} {question_text}", "options": sorted_options, "answer": final_answer})
     return questions
 
 # --- GIAO DIỆN ---
@@ -70,55 +64,21 @@ with tab_hs:
         res = supabase.table("exam_questions").select("nội_dung_json").eq("ma_de", ma_de_thi).execute()
         if res.data:
             quiz = res.data[0]["nội_dung_json"]
-            st.info(f"📋 Đề thi gồm {len(quiz)} câu hỏi. Em hãy cố gắng hoàn thành tốt nhất nhé!")
-            
             with st.form("quiz_form"):
                 c1, c2 = st.columns(2)
                 name = c1.text_input("Họ và Tên học sinh:")
                 class_name = c2.text_input("Lớp:")
-                st.write("---")
+                user_selections = {idx: st.radio(f"**{q['question']}**", q['options'], index=None, key=f"q_{idx}") for idx, q in enumerate(quiz)}
                 
-                user_selections = {}
-                for idx, q in enumerate(quiz):
-                    st.write(f"**{q['question']}**")
-                    user_selections[idx] = st.radio(
-                        "Chọn đáp án:", q['options'], index=None, 
-                        key=f"quiz_{idx}", label_visibility="collapsed"
-                    )
-                    st.write("")
-                
-                submitted = st.form_submit_button("NỘP BÀI THI", use_container_width=True)
-                
-                if submitted:
-                    if not name or not class_name:
-                        st.error("⚠️ Em cần điền Họ tên và Lớp để nộp bài!")
-                    else:
-                        # TÍNH ĐIỂM (Câu chưa chọn v sẽ là None, mặc định không khớp với answer)
-                        correct_num = 0
-                        for i, q in enumerate(quiz):
-                            v = user_selections[i]
-                            if v is not None and v.startswith(q['answer']):
-                                correct_num += 1
-                        
+                if st.form_submit_button("NỘP BÀI THI", use_container_width=True):
+                    if name and class_name:
+                        correct_num = sum(1 for i, q in enumerate(quiz) if user_selections[i] and user_selections[i].startswith(q['answer']))
                         grade = round((correct_num / len(quiz)) * 10, 2)
-                        
-                        # LƯU KẾT QUẢ
-                        supabase.table("student_results").insert({
-                            "ma_de": ma_de_thi, "ho_ten": name, "lop": class_name, "diem": grade
-                        }).execute()
-                        
-                        # HIỂN THỊ ĐIỂM
+                        supabase.table("student_results").insert({"ma_de": ma_de_thi, "ho_ten": name, "lop": class_name, "diem": grade}).execute()
                         st.balloons()
-                        st.markdown(f"""
-                        <div style="background-color:#f8f9fa; padding:20px; border:2px solid #28a745; border-radius:10px; text-align:center;">
-                            <h1 style="color:#28a745;">KẾT QUẢ CỦA {name.upper()}</h1>
-                            <h2 style="color:#333;">Điểm số: {grade} / 10</h2>
-                            <p style="font-size:1.2em;">Số câu đúng: <b>{correct_num}</b> / {len(quiz)}</p>
-                            <p style="color:#666;">Bài làm đã được gửi thành công đến cô giáo.</p>
-                        </div>
-                        """, unsafe_allow_html=True)
-        else:
-            st.warning("Mã đề này không tồn tại!")
+                        st.success(f"Kết quả của {name.upper()}: {grade} điểm (Đúng {correct_num}/{len(quiz)} câu)")
+                    else: st.error("⚠️ Điền tên và lớp nhé!")
+        else: st.warning("Mã đề không tồn tại!")
 
 with tab_gv:
     pwd = st.text_input("🔐 Nhập mật khẩu quản lý:", type="password")
@@ -126,20 +86,21 @@ with tab_gv:
         st.success("Chào cô giáo!")
         col1, col2 = st.columns([1, 1.5])
         with col1:
-            st.subheader("📤 Đăng đề mới")
             new_ma = st.text_input("Mã đề:")
             word_file = st.file_uploader("Tải đề Word:", type=["docx"])
             if st.button("Kích hoạt đề"):
                 if new_ma and word_file:
-                    quiz_data = parse_docx_smart(word_file)
-                    supabase.table("exam_questions").upsert({"ma_de": new_ma, "nội_dung_json": quiz_data}).execute()
-                    st.success(f"Đã lưu xong {len(quiz_data)} câu!")
+                    supabase.table("exam_questions").upsert({"ma_de": new_ma, "nội_dung_json": parse_docx_smart(word_file)}).execute()
+                    st.success("Đã tải xong!")
         with col2:
-            st.subheader("📊 Bảng điểm")
+            st.subheader("📊 Bảng điểm (Giờ Việt Nam)")
             all_data = supabase.table("student_results").select("*").execute()
             if all_data.data:
                 df = pd.DataFrame(all_data.data)
+                # CHUYỂN ĐỔI GIỜ TRƯỚC KHI HIỂN THỊ
+                df['created_at'] = df['created_at'].apply(format_vietnam_time)
+                
                 sel_ma = st.selectbox("Lọc mã đề:", ["Tất cả"] + sorted(df['ma_de'].unique().tolist()))
                 final_df = df if sel_ma == "Tất cả" else df[df['ma_de'] == sel_ma]
-                st.dataframe(final_df[["ma_de", "ho_ten", "lop", "diem", "created_at"]], use_container_width=True)
-                st.download_button("📥 Tải bảng điểm", final_df.to_csv(index=False, encoding='utf-8-sig'), "Bang_diem.csv")
+                st.dataframe(final_df[["ma_de", "ho_ten", "lop", "diem", "created_at"]].rename(columns={"created_at": "Thời gian nộp"}), use_container_width=True)
+                st.download_button("📥 Tải bảng điểm", final_df.to_csv(index=False, encoding='utf-8-sig'), "Bang_diem_VN.csv")
