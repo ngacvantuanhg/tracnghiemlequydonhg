@@ -18,8 +18,8 @@ st.set_page_config(page_title="Hệ Thống Thi Lê Quý Đôn", layout="wide", 
 ADMIN_PASSWORD = "141983" 
 
 # --- LINK ẢNH NỀN GITHUB (Bạn hãy thay USERNAME và REPO bằng thông tin của bạn) ---
-# Nếu file Anhnen.png nằm ở thư mục gốc của Repo, link sẽ có dạng:
-bg_img = "https://raw.githubusercontent.com/USERNAME/REPO/main/Anhnen.png"
+# Link chuẩn xác dựa trên GitHub của bạn
+bg_img = "https://raw.githubusercontent.com/ngacvantuanhg/tracnghiemlequydonhg/main/Anhnen.png"
 
 # --- STYLE GIAO DIỆN NAVY & WHITE CĂN GIỮA ---
 st.markdown(f"""
