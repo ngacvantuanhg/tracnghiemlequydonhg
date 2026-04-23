@@ -95,39 +95,55 @@ with tab_hs:
                         user_selections[idx] = st.radio("Chọn đáp án:", q['options'], index=None, key=f"q_{ma_de_input}_{idx}", label_visibility="collapsed")
                         st.write("")
                     
-                    # NÚT NỘP BÀI NẰM TRONG FORM (TRÁNH LỖI)
+                    st.divider()
+                    
+                    # --- KHU VỰC CẢNH BÁO TRƯỚC KHI NỘP ---
+                    da_lam = sum(1 for v in user_selections.values() if v is not None)
+                    total_q = len(quiz)
+                    
+                    if da_lam < total_q:
+                        st.warning(f"⚠️ **Cảnh báo:** Em mới làm được {da_lam}/{total_q} câu. Hãy suy nghĩ kỹ trước khi nộp bài nhé!")
+                    else:
+                        st.info(f"✅ Tuyệt vời! Em đã hoàn thành đủ {total_q}/{total_q} câu.")
+
+                    # Ô xác nhận bắt buộc
+                    confirm_submit = st.checkbox("Em xác nhận đã kiểm tra kỹ và muốn nộp bài ngay bây giờ.")
+
+                    # NÚT NỘP BÀI (Chỉ có tác dụng khi tích vào ô xác nhận)
                     if st.form_submit_button("📤 NỘP BÀI THI", use_container_width=True):
-                        da_lam = sum(1 for v in user_selections.values() if v is not None)
-                        total_q = len(quiz)
-                        correct_num = sum(1 for i, q in enumerate(quiz) if user_selections[i] and user_selections[i].startswith(q['answer']))
-                        grade = round((correct_num / total_q) * 10, 2)
-
-                        # Lưu kết quả
-                        supabase.table("student_results").insert({
-                            "ma_de": ma_de_input, "ho_ten": st.session_state[f"st_name_{ma_de_input}"], 
-                            "lop": st.session_state[f"st_class_{ma_de_input}"], "diem": grade, 
-                            "so_cau_dung": f"{correct_num}/{total_q}", "lop_thi": exam_info.get('ten_lop'), 
-                            "ngay_thi": exam_info.get('ngay_thi')
-                        }).execute()
-
-                        # Hiển thị cảm xúc theo điểm
-                        if da_lam < total_q: st.warning(f"🔔 Em đã nộp bài thành công, nhưng mới làm {da_lam}/{total_q} câu thôi nhé!")
-                        st.markdown("---")
-                        if grade < 5:
-                            st.markdown("<h1 style='text-align: center;'>😔</h1>", unsafe_allow_html=True)
-                            st.error(f"### Điểm của em: {grade}")
-                            st.info("Em hãy cố gắng ở bài kiểm tra sau nhé, cô tin em sẽ làm được!")
-                        elif 5 <= grade <= 7:
-                            st.markdown("<h1 style='text-align: center;'>🙂</h1>", unsafe_allow_html=True)
-                            st.warning(f"### Điểm của em: {grade}")
-                            st.write("Em làm khá tốt, nhưng hãy nỗ lực hơn ở bài kiểm tra sau em nhé!")
+                        if not confirm_submit:
+                            st.error("❌ Em cần tích vào ô xác nhận bên trên trước khi bấm Nộp bài!")
                         else:
-                            st.balloons(); st.snow()
-                            st.markdown("<h1 style='text-align: center;'>🎉 😍 🎉</h1>", unsafe_allow_html=True)
-                            st.success(f"### Điểm tuyệt vời: {grade}")
-                            st.header("Chúc mừng em đã hoàn thành tốt bài kiểm tra, cố gắng giữ phong độ này em nhé!")
-                        
-                        del st.session_state[f"started_{ma_de_input}"]
+                            # TÍNH ĐIỂM
+                            correct_num = sum(1 for i, q in enumerate(quiz) if user_selections[i] and user_selections[i].startswith(q['answer']))
+                            grade = round((correct_num / total_q) * 10, 2)
+
+                            # LƯU VÀO DATABASE
+                            supabase.table("student_results").insert({
+                                "ma_de": ma_de_input, "ho_ten": st.session_state[f"st_name_{ma_de_input}"], 
+                                "lop": st.session_state[f"st_class_{ma_de_input}"], "diem": grade, 
+                                "so_cau_dung": f"{correct_num}/{total_q}", "lop_thi": exam_info.get('ten_lop'), 
+                                "ngay_thi": exam_info.get('ngay_thi')
+                            }).execute()
+
+                            # HIỂN THỊ CẢM XÚC THEO ĐIỂM (Như cũ)
+                            st.markdown("---")
+                            if grade < 5:
+                                st.markdown("<h1 style='text-align: center;'>😔</h1>", unsafe_allow_html=True)
+                                st.error(f"### Điểm của em: {grade}")
+                                st.info("Em hãy cố gắng ở bài kiểm tra sau nhé, cô tin em sẽ làm được!")
+                            elif 5 <= grade <= 7:
+                                st.markdown("<h1 style='text-align: center;'>🙂</h1>", unsafe_allow_html=True)
+                                st.warning(f"### Điểm của em: {grade}")
+                                st.write("Em làm khá tốt, nhưng hãy nỗ lực hơn ở bài kiểm tra sau em nhé!")
+                            else:
+                                st.balloons(); st.snow()
+                                st.markdown("<h1 style='text-align: center;'>🎉 😍 🎉</h1>", unsafe_allow_html=True)
+                                st.success(f"### Điểm tuyệt vời: {grade}")
+                                st.header("Chúc mừng em đã hoàn thành tốt bài kiểm tra, cố gắng giữ phong độ này em nhé!")
+                            
+                            # Reset trạng thái
+                            del st.session_state[f"started_{ma_de_input}"]
         else: st.warning("🔎 Không tìm thấy mã đề này!")
 
 with tab_gv:
