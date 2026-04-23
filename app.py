@@ -17,45 +17,74 @@ supabase = create_client(url, key)
 st.set_page_config(page_title="Hệ Thống Thi Lê Quý Đôn", layout="wide", page_icon="🏫")
 ADMIN_PASSWORD = "141983" 
 
-# --- STYLE GIAO DIỆN NAVY & WHITE ---
-st.markdown("""
-    <style>
-    /* Nền chính */
-    .stApp { background-color: #ffffff; }
-    
-    /* Tùy chỉnh Header */
-    h1 { color: #1e3a8a; text-align: center; font-family: 'Helvetica Neue', sans-serif; font-weight: 800; letter-spacing: 1px; }
-    .sub-title { text-align: center; color: #1e40af; font-weight: 500; margin-bottom: 30px; font-size: 1.2em; border-bottom: 2px solid #1e3a8a; padding-bottom: 10px; }
-    
-    /* Thanh Timer cố định - Màu Navy */
-    .timer-box { 
-        position: fixed; top: 80px; right: 30px; padding: 15px 25px; 
-        background: #1e3a8a; color: white; border-radius: 10px;
-        z-index: 9999; text-align: center; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-        border: 2px solid #ffffff;
-    }
+# --- LINK ẢNH NỀN GITHUB (Bạn hãy thay USERNAME và REPO bằng thông tin của bạn) ---
+# Nếu file Anhnen.png nằm ở thư mục gốc của Repo, link sẽ có dạng:
+bg_img = "https://raw.githubusercontent.com/USERNAME/REPO/main/Anhnen.png"
 
-    /* Tùy chỉnh các nút bấm */
-    .stButton>button { 
-        background-color: #1e3a8a; color: white; border-radius: 8px; 
-        padding: 0.6rem 2rem; border: none; font-weight: 600; width: 100%;
-        transition: all 0.3s ease;
-    }
-    .stButton>button:hover { background-color: #1e40af; color: white; border: none; transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+# --- STYLE GIAO DIỆN NAVY & WHITE CĂN GIỮA ---
+st.markdown(f"""
+    <style>
+    /* Hình nền toàn trang */
+    .stApp {{
+        background-image: url("{bg_img}");
+        background-attachment: fixed;
+        background-size: cover;
+    }}
+
+    /* Lớp phủ trắng mờ để nội dung dễ đọc */
+    .main {{
+        background-color: rgba(255, 255, 255, 0.9);
+        padding: 2rem;
+        border-radius: 20px;
+    }}
+
+    /* Căn giữa tiêu đề */
+    h1 {{ color: #1e3a8a; text-align: center !important; font-family: 'Helvetica Neue', sans-serif; font-weight: 800; }}
+    .sub-title {{ text-align: center !important; color: #1e40af; font-weight: 500; margin-bottom: 30px; font-size: 1.2em; }}
     
-    /* Khu vực Form */
-    [data-testid="stForm"] { border: 1px solid #e5e7eb; border-radius: 12px; padding: 2rem; background-color: #f8fafc; }
+    /* Căn giữa Tabs */
+    .stTabs [data-baseweb="tab-list"] {{ justify-content: center; }}
+    .stTabs [data-baseweb="tab"] {{ font-weight: bold; }}
+
+    /* Căn giữa và làm gọn Form */
+    [data-testid="stForm"] {{
+        border: 2px solid #1e3a8a;
+        border-radius: 15px;
+        background-color: white;
+        max-width: 850px;
+        margin: 0 auto !important; /* QUAN TRỌNG: Căn giữa khối Form */
+        padding: 2rem;
+    }}
+
+    /* Căn giữa các đoạn text markdown */
+    .stMarkdown, .stSubheader, p {{ text-align: center !important; }}
+
+    /* Đồng hồ Navy cố định */
+    .timer-box {{ 
+        position: fixed; top: 20px; right: 20px; padding: 10px 20px; 
+        background: #1e3a8a; color: white; border-radius: 10px;
+        z-index: 9999; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    }}
+
+    /* Nút bấm Navy căn giữa */
+    .stButton>button {{ 
+        background-color: #1e3a8a; color: white; border-radius: 30px; 
+        padding: 0.7rem 3rem; font-weight: 600; 
+        display: block; margin: 0 auto !important; /* Căn giữa nút */
+    }}
+    .stButton>button:hover {{ background-color: #1e40af; transform: scale(1.03); }}
     
-    /* Màu sắc Radio button */
-    .stRadio > div { gap: 10px; }
+    /* Căn lề radio button (đáp án) sang trái để dễ đọc nhưng khối vẫn ở giữa */
+    [data-testid="stMarkdownContainer"] p {{ text-align: left !important; }}
+    div[role="radiogroup"] {{ display: flex; flex-direction: column; align-items: flex-start; margin-left: 20%; }}
     </style>
     """, unsafe_allow_html=True)
 
-# --- TIÊU ĐỀ CHÍNH ---
+# --- TIÊU ĐỀ ---
 st.markdown("<h1>HỆ THỐNG THI TRỰC TUYẾN</h1>", unsafe_allow_html=True)
 st.markdown("<div class='sub-title'>Trường THCS Lê Quý Đôn, phường Hà Giang 1, thành phố Tuyên Quang</div>", unsafe_allow_html=True)
 
-# --- HÀM HỖ TRỢ ---
+# --- HÀM HỖ TRỢ (Giữ nguyên) ---
 def format_vietnam_time(utc_time_str):
     try:
         utc_dt = datetime.fromisoformat(utc_time_str.replace('Z', '+00:00'))
@@ -90,7 +119,9 @@ def parse_docx_smart(file):
 tab_hs, tab_gv = st.tabs(["👨‍🎓 PHÒNG THI HỌC SINH", "👩‍🏫 QUẢN TRỊ VIÊN"])
 
 with tab_hs:
-    ma_de_input = st.text_input("🔑 Nhập Mã đề thi:", placeholder="Nhập mã cô giáo cung cấp...")
+    c1, c2, c3 = st.columns([1, 2, 1])
+    with c2:
+        ma_de_input = st.text_input("🔑 Nhập Mã đề thi cô giáo giao:", placeholder="Ví dụ: 101, 002...")
     
     if ma_de_input:
         res = supabase.table("exam_questions").select("*").eq("ma_de", ma_de_input).execute()
@@ -104,9 +135,8 @@ with tab_hs:
 
             if not st.session_state[f"started_{ma_de_input}"]:
                 with st.form("info_form"):
-                    col_a, col_b = st.columns(2)
-                    name = col_a.text_input("👤 Họ và Tên của em:")
-                    actual_class = col_b.text_input("🏫 Lớp của em:")
+                    name = st.text_input("👤 Họ và Tên của em:")
+                    actual_class = st.text_input("🏫 Lớp của em:")
                     st.info(f"📋 Môn thi: {exam_info.get('ten_lop')} | Thời gian: {time_limit} phút")
                     if st.form_submit_button("🚀 BẮT ĐẦU LÀM BÀI"):
                         if name and actual_class:
@@ -117,15 +147,13 @@ with tab_hs:
                             st.rerun()
                         else: st.error("❌ Em hãy điền đầy đủ thông tin nhé!")
             else:
-                # --- ĐỒNG HỒ ĐẾM NGƯỢC ---
                 time_left = int(st.session_state[f"end_time_{ma_de_input}"] - time.time())
-                
                 if time_left > 0:
                     mm, ss = divmod(time_left, 60)
-                    st.markdown(f'<div class="timer-box"><small>⏳ THỜI GIAN CÒN LẠI</small><br><b style="font-size:26px;">{mm:02d}:{ss:02d}</b></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="timer-box"><small>⏳ CÒN LẠI</small><br><b style="font-size:24px;">{mm:02d}:{ss:02d}</b></div>', unsafe_allow_html=True)
                 
                 with st.form("quiz_form"):
-                    st.markdown(f"**Thí sinh:** {st.session_state[f'st_name_{ma_de_input}'].upper()} | **Lớp:** {st.session_state[f'st_class_{ma_de_input}']}")
+                    st.subheader(f"Thí sinh: {st.session_state[f'st_name_{ma_de_input}'].upper()}")
                     user_selections = {}
                     for idx, q in enumerate(quiz):
                         st.write(f"**{q['question']}**")
@@ -137,11 +165,6 @@ with tab_hs:
                     submitted = st.form_submit_button("📤 NỘP BÀI THI")
 
                     if submitted or time_left <= 0:
-                        if time_left <= 0: st.error("⏰ Hết giờ! Hệ thống đang tự động nộp bài...")
-                        elif not confirm: 
-                            st.error("❌ Em cần tích vào ô xác nhận trước khi nộp bài!")
-                            st.stop()
-                            
                         correct_num = sum(1 for i, q in enumerate(quiz) if user_selections[i] and user_selections[i].startswith(q['answer']))
                         grade = round((correct_num / len(quiz)) * 10, 2)
                         
@@ -155,71 +178,43 @@ with tab_hs:
                         st.markdown("---")
                         if grade < 5:
                             st.markdown("<h1 style='font-size:80px;'>😔</h1>", unsafe_allow_html=True)
-                            st.error(f"### Điểm của em: {grade}. Hãy nỗ lực hơn nhé!")
+                            st.error(f"Điểm của em: {grade}. Cố gắng hơn nhé!")
                         elif grade <= 7:
                             st.markdown("<h1 style='font-size:80px;'>🙂</h1>", unsafe_allow_html=True)
-                            st.warning(f"### Điểm của em: {grade}. Em làm khá tốt!")
+                            st.warning(f"Điểm của em: {grade}. Khá tốt!")
                         else:
                             st.balloons(); st.snow()
                             st.markdown("<h1 style='font-size:80px;'>🎉 😍 🎉</h1>", unsafe_allow_html=True)
-                            st.success(f"### Điểm tuyệt vời: {grade}! Chúc mừng em!")
+                            st.success(f"Điểm tuyệt vời: {grade}!")
                         
                         del st.session_state[f"started_{ma_de_input}"]
                         st.stop()
-
                 if time_left > 0:
                     time.sleep(1)
                     st.rerun()
-        else: st.warning("🔎 Không tìm thấy mã đề!")
 
 with tab_gv:
     pwd = st.text_input("🔐 Mật khẩu quản lý:", type="password")
     if pwd == ADMIN_PASSWORD:
         col1, col2 = st.columns([1, 2.5])
         with col1:
-            st.subheader("📤 Đăng đề mới")
+            st.subheader("📤 Đăng đề")
             new_ma = st.text_input("Mã đề:")
             ten_lop = st.text_input("Môn/Lớp:")
             thoi_gian = st.number_input("Thời gian (phút):", min_value=1, value=15)
-            ngay_thi = st.date_input("Ngày kiểm tra:")
-            word_file = st.file_uploader("Tải đề Word:", type=["docx"])
-            if st.button("🚀 Kích hoạt đề"):
+            ngay_thi = st.date_input("Ngày thi:")
+            word_file = st.file_uploader("Tải Word:", type=["docx"])
+            if st.button("🚀 Kích hoạt"):
                 if new_ma and word_file:
                     data = parse_docx_smart(word_file)
-                    supabase.table("exam_questions").upsert({
-                        "ma_de": new_ma, "nội_dung_json": data, "ten_lop": ten_lop, 
-                        "ngay_thi": ngay_thi.strftime("%d/%m/%Y"), "thoi_gian_phut": thoi_gian
-                    }).execute()
-                    st.success("Đã kích hoạt đề thành công!")
-            st.divider()
-            if st.button("🔥 Xóa sạch kết quả"):
-                supabase.table("student_results").delete().neq("id", 0).execute()
-                st.rerun()
-
+                    supabase.table("exam_questions").upsert({"ma_de": new_ma, "nội_dung_json": data, "ten_lop": ten_lop, "ngay_thi": ngay_thi.strftime("%d/%m/%Y"), "thoi_gian_phut": thoi_gian}).execute()
+                    st.success("Xong!")
         with col2:
-            st.subheader("📊 Bảng điểm tổng hợp")
+            st.subheader("📊 Kết quả")
             all_res = supabase.table("student_results").select("*").execute()
             if all_res.data:
                 df = pd.DataFrame(all_res.data)
-                df['created_at'] = df['created_at'].apply(format_vietnam_time)
                 list_lop = sorted(df['lop_thi'].dropna().unique().tolist())
-                sel_lop = st.selectbox("📌 Chọn Lớp:", list_lop)
-                df_lop = df[df['lop_thi'] == sel_lop]
-                list_ngay = sorted(df_lop['ngay_thi'].dropna().unique().tolist(), reverse=True)
-                sel_ngay = st.selectbox("📅 Chọn Ngày:", list_ngay)
-                final_df = df_lop[df_lop['ngay_thi'] == sel_ngay].sort_values(by="ho_ten")
-                
-                fig = px.histogram(final_df, x="diem", nbins=10, title=f"Phân phối điểm {sel_lop}", color_discrete_sequence=['#1e3a8a'])
-                st.plotly_chart(fig, use_container_width=True)
-
-                mapping_cols = {"ho_ten": "Họ và Tên", "lop": "Lớp học", "so_cau_dung": "Đúng/Tổng", "diem": "Điểm số", "created_at": "Thời gian nộp", "ma_de": "Mã đề"}
-                st.dataframe(final_df[list(mapping_cols.keys())].rename(columns=mapping_cols), use_container_width=True)
-
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                    final_df[list(mapping_cols.keys())].rename(columns=mapping_cols).to_excel(writer, index=False, sheet_name='Báo cáo')
-                    workbook, worksheet = writer.book, writer.sheets['Báo cáo']
-                    h_format = workbook.add_format({'bold': True, 'bg_color': '#D1D5DB', 'border': 1, 'align': 'center'})
-                    for c_num, val in enumerate(mapping_cols.values()): worksheet.write(0, c_num, val, h_format)
-                    worksheet.set_column('A:F', 20)
-                st.download_button("📥 Tải Báo cáo Excel", data=output.getvalue(), file_name=f"Bao_cao_{sel_lop}.xlsx")
+                sel_lop = st.selectbox("📌 Lớp:", list_lop)
+                final_df = df[df['lop_thi'] == sel_lop].sort_values(by="ho_ten")
+                st.dataframe(final_df[["ho_ten", "lop", "so_cau_dung", "diem", "ma_de"]], use_container_width=True)
