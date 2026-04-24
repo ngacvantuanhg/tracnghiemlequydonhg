@@ -20,30 +20,55 @@ ADMIN_PASSWORD = "141983"
 # --- LINK ẢNH NỀN GITHUB ---
 bg_img = "https://raw.githubusercontent.com/ngacvantuanhg/tracnghiemlequydonhg/main/Anhnen.png"
 
-# --- STYLE GIAO DIỆN V21 (Ô NHẬP LIỆU TRẮNG SÁNG & CĂN GIỮA) ---
+# --- STYLE GIAO DIỆN V23: SỬA LỖI CHỒNG KHUNG & TỐI ƯU HIỂN THỊ ---
 st.markdown(f"""
     <style>
+    /* Hình nền toàn trang */
     .stApp {{
         background-image: url("{bg_img}");
         background-attachment: fixed;
         background-size: cover;
         background-position: center;
     }}
+
+    /* Lớp phủ để nội dung nổi bật */
     .main {{
         background-color: rgba(255, 255, 255, 0.8);
         padding: 2rem;
         border-radius: 20px;
     }}
+
+    /* CĂN GIỮA TIÊU ĐỀ */
     h1, .sub-title {{
         text-align: center !important;
         color: #1e3a8a !important;
     }}
-    input, div[data-baseweb="input"], div[data-baseweb="select"], .stTextArea textarea {{
+
+    /* SỬA LỖI CHỒNG KHUNG: Chỉ áp dụng viền cho lớp ngoài cùng của input */
+    div[data-baseweb="input"], div[data-baseweb="select"], div[data-baseweb="datepicker"] {{
         background-color: #ffffff !important;
-        color: #1e3a8a !important;
         border: 2px solid #cbd5e1 !important;
         border-radius: 8px !important;
     }}
+    
+    /* Loại bỏ viền của các lớp con bên trong để không bị chồng lề */
+    div[data-baseweb="input"] > div, div[data-baseweb="select"] > div {{
+        border: none !important;
+    }}
+
+    /* Làm trắng text bên trong ô nhập */
+    input {{
+        background-color: transparent !important;
+        color: #1e3a8a !important;
+    }}
+    
+    /* Hiệu ứng focus sạch sẽ */
+    div[data-baseweb="input"]:focus-within, div[data-baseweb="select"]:focus-within {{
+        border-color: #1e3a8a !important;
+        box-shadow: 0 0 0 1px #1e3a8a !important;
+    }}
+
+    /* Căn giữa và làm gọn Form */
     [data-testid="stForm"] {{
         background-color: rgba(255, 255, 255, 0.95);
         border: 2px solid #1e3a8a;
@@ -53,6 +78,8 @@ st.markdown(f"""
         max-width: 850px;
         margin: 0 auto !important;
     }}
+
+    /* Nút bấm Navy căn giữa */
     .stButton>button {{
         display: block;
         margin: 0 auto !important;
@@ -61,11 +88,6 @@ st.markdown(f"""
         border-radius: 30px;
         padding: 10px 40px;
         font-weight: bold;
-    }}
-    .timer-box {{ 
-        position: fixed; top: 20px; right: 20px; padding: 10px 20px; 
-        background: #1e3a8a; color: white; border-radius: 10px;
-        z-index: 1000; text-align: center;
     }}
     </style>
     """, unsafe_allow_html=True)
