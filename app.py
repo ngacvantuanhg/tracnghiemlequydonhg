@@ -214,10 +214,24 @@ with tab_gv:
                             </table>
                             <hr>
                         """, unsafe_allow_html=True)
+                        # --- ĐOẠN HIỂN THỊ PHIẾU IN AN TOÀN (Sửa lỗi ec[0]) ---
                         for i, q in enumerate(quiz_js):
-                            ec = chi_tiet.get(str(i+1), "X")
-                            d_dung = q['answer']
-                            icon = "✅" if ec[0] == d_dung[0] else f"❌ (Đáp án đúng: <b>{d_dung}</b>)"
+                            # Lấy đáp án học sinh đã chọn, nếu rỗng thì ghi là "Chưa chọn"
+                            ec = chi_tiet.get(str(i+1), "Chưa chọn")
+                            d_dung = q.get('answer', "")
+                            
+                            # So sánh an toàn: kiểm tra độ dài chuỗi trước khi lấy ký tự [0]
+                            is_correct = False
+                            if ec != "Chưa chọn" and len(ec) > 0 and len(d_dung) > 0:
+                                if ec[0] == d_dung[0]:
+                                    is_correct = True
+                            
+                            # Tạo icon và thông báo đúng sai
+                            if is_correct:
+                                icon = "✅ <span style='color:green;'>Đúng</span>"
+                            else:
+                                icon = f"❌ <span style='color:red;'>Sai (Đáp án đúng: <b>{d_dung}</b>)</span>"
+                            
                             st.markdown(f"""
                             <div style="color: black !important; border-bottom: 1px dashed #ccc; padding: 8px 0;">
                                 <b>Câu {i+1}:</b> {q['question']}<br>
