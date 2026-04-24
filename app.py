@@ -19,12 +19,12 @@ ADMIN_PASSWORD = "141983"
 
 bg_img = "https://raw.githubusercontent.com/ngacvantuanhg/tracnghiemlequydonhg/main/Anhnen.png"
 
-# --- STYLE GIAO DIỆN V28 ---
+# --- STYLE GIAO DIỆN V29 ---
 st.markdown(f"""
     <style>
     .stApp {{ background-image: url("{bg_img}"); background-attachment: fixed; background-size: cover; background-position: center; }}
     .main {{ background-color: rgba(255, 255, 255, 0.85); padding: 2rem; border-radius: 20px; }}
-    h1, .sub-title {{ text-align: center !important; color: #1e3a8a !important; }}
+    h1, .sub-title {{ text-align: center !important; color: #1e3a8a !important; font-family: 'Arial'; }}
     
     div[data-baseweb="input"], div[data-baseweb="select"], div[data-baseweb="datepicker"] {{
         background-color: #ffffff !important; border: 2px solid #cbd5e1 !important; border-radius: 8px !important;
@@ -35,13 +35,10 @@ st.markdown(f"""
         border-radius: 15px; padding: 2rem; max-width: 850px; margin: 0 auto !important;
     }}
     
-    .timer-box {{ position: fixed; top: 20px; right: 20px; padding: 10px 20px; background: #1e3a8a; color: white; border-radius: 10px; z-index: 1000; text-align: center; border: 2px solid white; }}
+    .timer-box {{ position: fixed; top: 20px; right: 20px; padding: 10px 20px; background: #1e3a8a; color: white; border-radius: 10px; z-index: 1000; text-align: center; border: 2px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }}
     
-    /* FIX LỖI TRANG IN TRẮNG: Chỉ ẩn những thành phần không cần thiết */
     @media print {{
-        header, footer, .stTabs, [data-testid="stHeader"], [data-testid="stSidebar"], .no-print, button, .stButton {{
-            display: none !important;
-        }}
+        header, footer, .stTabs, [data-testid="stHeader"], [data-testid="stSidebar"], .no-print, button, .stButton {{ display: none !important; }}
         .main {{ background: white !important; padding: 0 !important; width: 100% !important; }}
         .print-area {{ display: block !important; width: 100% !important; color: black !important; }}
     }}
@@ -72,13 +69,14 @@ def parse_docx_smart(file):
         final_answer = ""
         for j in range(1, len(parts), 2):
             label = parts[j].strip().upper()[0]
-            if "[[DUNG]]" in parts[j+1]: final_answer = label
-            options_dict[label] = f"{label}. {parts[j+1].replace('[[DUNG]]', '').replace('[[HET]]', '').strip()}"
+            val = parts[j+1].replace('[[DUNG]]', '').replace('[[HET]]', '').strip()
+            if "[[DUNG]]" in parts[j+1]: final_answer = f"{label}. {val}"
+            options_dict[label] = f"{label}. {val}"
         sorted_options = [options_dict[k] for k in sorted(options_dict.keys())]
         if sorted_options: questions.append({"question": f"{header} {question_text}", "options": sorted_options, "answer": final_answer})
     return questions
 
-# --- GIAO DIỆN ---
+# --- TIÊU ĐỀ ---
 st.markdown("<h1 class='no-print'>HỆ THỐNG THI TRỰC TUYẾN</h1>", unsafe_allow_html=True)
 st.markdown("<div class='sub-title no-print'>Trường THCS Lê Quý Đôn, phường Hà Giang 1, tỉnh Tuyên Quang</div>", unsafe_allow_html=True)
 
@@ -98,51 +96,77 @@ with tab_hs:
                     ex_res = supabase.table("exam_questions").select("*").eq("ma_de", sel_ma_de).execute()
                     if ex_res.data:
                         ex_info = ex_res.data[0]
-                        st.session_state.update({
-                            "quiz_data": ex_info["nội_dung_json"],
-                            "time_limit": ex_info.get('thoi_gian_phut', 15),
+                        st.session_state.update({"quiz_data": ex_info["nội_dung_json"], "time_limit": ex_info.get('thoi_gian_phut', 15),
                             "ma_de_dang_thi": sel_ma_de, "st_name": name, "st_class": actual_class,
                             "end_time": time.time() + (ex_info.get('thoi_gian_phut', 15) * 60), "is_testing": True,
-                            "mon": ex_info.get('ten_lop'), "ngay": ex_info.get('ngay_thi')
-                        })
+                            "mon": ex_info.get('ten_lop'), "ngay": ex_info.get('ngay_thi')})
                         st.rerun()
                 else: st.error("❌ Điền đủ thông tin em nhé!")
     else:
+        # ĐỒNG HỒ ĐẾM NGƯỢC
         t_left = int(st.session_state["end_time"] - time.time())
         if t_left > 0:
             mm, ss = divmod(t_left, 60)
             st.markdown(f'<div class="timer-box no-print"><small>⏳ CÒN LẠI</small><br><b style="font-size:24px;">{mm:02d}:{ss:02d}</b></div>', unsafe_allow_html=True)
             time.sleep(1)
-            st.empty()
+            st.rerun() if t_left > 1 else None # Tự động chạy lại để đếm giây
         
         with st.form("quiz_form"):
             st.info(f"👨‍🎓: **{st.session_state['st_name'].upper()}** | Lớp: **{st.session_state['st_class']}**")
             u_choices = {}
             for idx, q in enumerate(st.session_state["quiz_data"]):
-                st.write(f"**Câu {idx+1}: {q['question']}**")
+                st.write(f"**{q['question']}**")
                 u_choices[idx] = st.radio("Chọn:", q['options'], index=None, key=f"q_{idx}", label_visibility="collapsed")
             
+            st.write("---")
+            da_lam = sum(1 for v in u_choices.values() if v is not None)
+            total_q = len(st.session_state["quiz_data"])
+            
+            if da_lam < total_q:
+                st.warning(f"⚠️ Em mới làm được {da_lam}/{total_q} câu. Hãy kiểm tra kỹ!")
+            else:
+                st.success("✅ Tuyệt vời! Em đã hoàn thành tất cả các câu.")
+
+            confirm = st.checkbox("Em xác nhận đã kiểm tra kỹ bài làm và muốn nộp bài ngay.")
+            
             if st.form_submit_button("📤 NỘP BÀI THI") or t_left <= 0:
+                if t_left > 0 and not confirm:
+                    st.error("❌ Em hãy tích vào ô xác nhận nộp bài ở trên nhé!"); st.stop()
+                
                 c_num = 0
                 b_lam = []
                 for i, q in enumerate(st.session_state["quiz_data"]):
-                    ans = u_choices[i][0] if u_choices[i] else "X"
-                    b_lam.append(f"{i+1}:{ans}")
-                    if u_choices[i] and u_choices[i].startswith(q['answer']): c_num += 1
+                    ch = u_choices[i] if u_choices[i] else "Chưa chọn"
+                    b_lam.append(f"{i+1}:{ch}")
+                    if u_choices[i] and u_choices[i].startswith(q['answer'][0]): c_num += 1
                 
-                grade = round((c_num / len(st.session_state["quiz_data"])) * 10, 2)
+                grade = round((c_num / total_q) * 10, 2)
                 supabase.table("student_results").insert({
                     "ma_de": st.session_state["ma_de_dang_thi"], "ho_ten": st.session_state["st_name"], 
-                    "lop": st.session_state["st_class"], "diem": grade, "so_cau_dung": f"{c_num}/{len(st.session_state['quiz_data'])}",
+                    "lop": st.session_state["st_class"], "diem": grade, "so_cau_dung": f"{c_num}/{total_q}",
                     "lop_thi": st.session_state["mon"], "ngay_thi": st.session_state["ngay"], "chi_tiet_bai_lam": ",".join(b_lam)
                 }).execute()
+
+                # HIỂN THỊ KẾT QUẢ VỚI BIỂU TƯỢNG CẢM XÚC
+                st.markdown("---")
+                if grade < 5:
+                    st.markdown("<h1 style='font-size:100px;'>😔</h1>", unsafe_allow_html=True)
+                    st.error(f"### Điểm của em: {grade}. Hãy cố gắng hơn nhé!")
+                elif 5 <= grade <= 7:
+                    st.markdown("<h1 style='font-size:100px;'>🙂</h1>", unsafe_allow_html=True)
+                    st.warning(f"### Điểm của em: {grade}. Em làm khá tốt!")
+                else:
+                    st.balloons(); st.snow()
+                    st.markdown("<h1 style='font-size:100px;'>🎉 😍 🎉</h1>", unsafe_allow_html=True)
+                    st.success(f"### Điểm tuyệt vời: {grade}! Cô chúc mừng em!")
+                
                 st.session_state["is_testing"] = False
-                st.balloons(); time.sleep(2); st.rerun()
+                time.sleep(5); st.rerun()
 
 with tab_gv:
     pwd = st.text_input("🔐 Mật khẩu quản lý:", type="password", key="gv_pwd")
     if pwd == ADMIN_PASSWORD:
-        col1, col2 = st.columns([1, 1.5])
+        col1, col2 = st.columns([1, 1.8])
         with col1:
             st.subheader("📤 QUẢN LÝ ĐỀ")
             n_ma = st.text_input("Mã đề:"); t_mon = st.text_input("Môn/Lớp:")
@@ -166,8 +190,7 @@ with tab_gv:
             st.subheader("📊 KẾT QUẢ & IN PHIẾU")
             res_all = supabase.table("student_results").select("*").execute()
             if res_all.data:
-                df = pd.DataFrame(res_all.data)
-                df['created_at'] = df['created_at'].apply(format_vietnam_time)
+                df = pd.DataFrame(res_all.data); df['created_at'] = df['created_at'].apply(format_vietnam_time)
                 st.dataframe(df[["ho_ten", "lop", "so_cau_dung", "diem", "ma_de"]], use_container_width=True)
                 
                 st.write("---")
@@ -179,28 +202,27 @@ with tab_gv:
                         quiz_js = de.data[0]['nội_dung_json']
                         chi_tiet = dict(i.split(":") for i in hs['chi_tiet_bai_lam'].split(","))
                         
-                        # KHU VỰC IN PHIẾU
                         st.markdown(f"""
                         <div class="print-area" style="background: white; padding: 20px; border: 2px solid #1e3a8a; color: black !important;">
-                            <h2 style="text-align: center; color: #1e3a8a; margin-bottom: 5px;">PHIẾU MINH CHỨNG KẾT QUẢ</h2>
-                            <p style="text-align: center; margin-top: 0;">Trường THCS Lê Quý Đôn - Tuyên Quang</p>
+                            <h2 style="text-align: center; color: #1e3a8a;">PHIẾU MINH CHỨNG KẾT QUẢ</h2>
+                            <p style="text-align: center;">Trường THCS Lê Quý Đôn - Tuyên Quang</p>
                             <hr>
                             <table style="width: 100%; color: black;">
                                 <tr><td><b>Học sinh:</b> {hs['ho_ten'].upper()}</td><td><b>Lớp:</b> {hs['lop']}</td></tr>
-                                <tr><td><b>Mã đề:</b> {hs['ma_de']}</td><td><b>Ngày:</b> {hs['ngay_thi']}</td></tr>
-                                <tr><td><b>Môn thi:</b> {hs['lop_thi']}</td><td><b>Điểm: {hs['diem']} ({hs['so_cau_dung']})</b></td></tr>
+                                <tr><td><b>Mã đề:</b> {hs['ma_de']}</td><td><b>Môn thi:</b> {hs['lop_thi']}</td></tr>
+                                <tr><td><b>Ngày nộp:</b> {hs['created_at']}</td><td><b>Điểm: {hs['diem']} ({hs['so_cau_dung']})</b></td></tr>
                             </table>
                             <hr>
                         """, unsafe_allow_html=True)
                         for i, q in enumerate(quiz_js):
                             ec = chi_tiet.get(str(i+1), "X")
-                            # ĐẢM BẢO HIỆN ĐÁP ÁN ĐÚNG
-                            dung_sai = f"<span style='color:green;'>✅ Đúng</span>" if ec == q['answer'] else f"<span style='color:red;'>❌ Sai (Đáp án đúng: <b>{q['answer']}</b>)</span>"
+                            d_dung = q['answer']
+                            icon = "✅" if ec[0] == d_dung[0] else f"❌ (Đáp án đúng: <b>{d_dung}</b>)"
                             st.markdown(f"""
-                            <div style="color: black !important; border-bottom: 1px dashed #ccc; padding: 5px 0;">
+                            <div style="color: black !important; border-bottom: 1px dashed #ccc; padding: 8px 0;">
                                 <b>Câu {i+1}:</b> {q['question']}<br>
-                                👉 Em chọn: <b>{ec}</b> | Kết quả: {dung_sai}
+                                👉 Em chọn: <b>{ec}</b> | Kết quả: {icon}
                             </div>
                             """, unsafe_allow_html=True)
                         st.markdown("</div>", unsafe_allow_html=True)
-                        st.info("💡 Nhấn Ctrl + P để in phiếu sạch sẽ này. (Trong hộp thoại in, hãy chọn 'Lưu dưới dạng PDF')")
+                        st.info("💡 Nhấn Ctrl + P để in phiếu sạch sẽ này.")
