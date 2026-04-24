@@ -92,7 +92,7 @@ st.markdown(f"""
 
 # --- TIÊU ĐỀ ---
 st.markdown("<h1>HỆ THỐNG THI TRỰC TUYẾN</h1>", unsafe_allow_html=True)
-st.markdown("<div class='sub-title'>Trường THCS Lê Quý Đôn, phường Hà Giang 1, thành phố Tuyên Quang</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub-title'>Trường THCS Lê Quý Đôn, phường Hà Giang 1, tỉnh Tuyên Quang</div>", unsafe_allow_html=True)
 
 # --- HÀM HỖ TRỢ (Giữ nguyên) ---
 def format_vietnam_time(utc_time_str):
