@@ -208,11 +208,19 @@ with tab_gv:
             if st.button("🚀 Kích hoạt"):
                 if n_ma and f_word:
                     d_json = parse_docx_smart(f_word)
+                    # Định dạng lại ngày thi thành DD/MM/YYYY trước khi gửi lên Supabase
+                    ngay_thi_formatted = d_thi.strftime("%d/%m/%Y")
+                    
                     supabase.table("exam_questions").upsert({
-                        "ma_de": n_ma, "nội_dung_json": d_json, "ten_lop": t_mon, 
-                        "ngay_thi": d_thi.strftime("%d/%m/%Y"), "thoi_gian_phut": t_gian
+                        "ma_de": n_ma, 
+                        "nội_dung_json": d_json, 
+                        "ten_lop": t_mon, 
+                        "ngay_thi": ngay_thi_formatted, # Đã chuẩn định dạng VN
+                        "thoi_gian_phut": t_gian
                     }).execute()
-                    st.success(f"Đã kích hoạt đề {n_ma}!")
+                    
+                    st.success(f"✅ Đã kích hoạt đề {n_ma} ngày {ngay_thi_formatted}!")
+                    time.sleep(1)
                     st.rerun()
 
             st.divider()
