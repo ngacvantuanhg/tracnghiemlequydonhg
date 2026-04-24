@@ -18,7 +18,7 @@ ADMIN_PASSWORD = "141983"
 
 bg_img = "https://raw.githubusercontent.com/ngacvantuanhg/tracnghiemlequydonhg/main/Anhnen.png"
 
-# --- STYLE GIAO DIỆN V30 ---
+# --- STYLE GIAO DIỆN V31 ---
 st.markdown(f"""
     <style>
     .stApp {{ background-image: url("{bg_img}"); background-attachment: fixed; background-size: cover; background-position: center; }}
@@ -34,7 +34,7 @@ st.markdown(f"""
     .timer-container {{
         position: fixed; top: 20px; right: 20px; padding: 10px 20px; 
         background: #1e3a8a; color: white; border-radius: 10px;
-        z-index: 1000; text-align: center; border: 2px solid white;
+        z-index: 9999; text-align: center; border: 2px solid white; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     }}
     @media print {{
         header, footer, .stTabs, [data-testid="stHeader"], [data-testid="stSidebar"], .no-print, button, .stButton {{ display: none !important; }}
@@ -87,6 +87,7 @@ with tab_hs:
 
     if not st.session_state.get("is_testing", False):
         with st.form("info_form"):
+            st.subheader("📝 Thông tin thí sinh")
             name = st.text_input("👤 Họ và Tên của em:")
             actual_class = st.text_input("🏫 Lớp của em:")
             sel_ma_de = st.selectbox("🔑 Chọn Mã đề thi:", options=["-- Chọn mã đề --"] + list_ma_de)
@@ -103,19 +104,15 @@ with tab_hs:
                             "is_testing": True, "mon": ex_info.get('ten_lop'), "ngay": ex_info.get('ngay_thi')
                         })
                         st.rerun()
-                else: st.error("❌ Điền đủ thông tin em nhé!")
+                else: st.error("❌ Em điền đủ thông tin nhé!")
     else:
-        # --- ĐỒNG HỒ ĐẾM NGƯỢC THÔNG MINH ---
+        # --- ĐỒNG HỒ ĐẾM NGƯỢC ---
         t_left = int(st.session_state["end_time"] - time.time())
         if t_left > 0:
             mm, ss = divmod(t_left, 60)
-            st.markdown(f'''
-                <div class="timer-container no-print">
-                    <small>⏳ CÒN LẠI</small><br>
-                    <b style="font-size:24px;">{mm:02d}:{ss:02d}</b>
-                </div>
-            ''', unsafe_allow_html=True)
-            # Không dùng st.rerun() ở đây để tránh treo bài thi
+            st.markdown(f'<div class="timer-container no-print"><small>⏳ CÒN LẠI</small><br><b style="font-size:24px;">{mm:02d}:{ss:02d}</b></div>', unsafe_allow_html=True)
+            time.sleep(1)
+            st.rerun()
         
         with st.form("quiz_form"):
             st.info(f"👨‍🎓: **{st.session_state['st_name'].upper()}** | Lớp: **{st.session_state['st_class']}**")
@@ -128,14 +125,18 @@ with tab_hs:
             confirm = st.checkbox("Em xác nhận đã kiểm tra kỹ bài làm và muốn nộp bài.")
             if st.form_submit_button("📤 NỘP BÀI THI") or t_left <= 0:
                 if t_left > 0 and not confirm:
-                    st.error("❌ Em hãy tích vào ô xác nhận nộp bài ở trên nhé!"); st.stop()
+                    st.error("❌ Em hãy tích vào ô xác nhận nộp bài nhé!"); st.stop()
                 
                 c_num = 0
                 b_lam = []
                 for i, q in enumerate(st.session_state["quiz_data"]):
                     ch = u_choices[i] if u_choices[i] else "Chưa chọn"
                     b_lam.append(f"{i+1}:{ch}")
-                    if u_choices[i] and u_choices[i].startswith(q['answer'][0]): c_num += 1
+                    # SỬA LỖI INDEX: Kiểm tra đáp án tồn tại trước khi chấm
+                    ans_correct = q.get('answer', "")
+                    if u_choices[i] and len(ans_correct) > 0:
+                        if u_choices[i].startswith(ans_correct[0]):
+                            c_num += 1
                 
                 grade = round((c_num / len(st.session_state["quiz_data"])) * 10, 2)
                 supabase.table("student_results").insert({
@@ -146,7 +147,7 @@ with tab_hs:
                 
                 st.session_state["is_testing"] = False
                 if grade >= 8: st.balloons()
-                st.success(f"Nộp bài thành công! Điểm: {grade}"); time.sleep(3); st.rerun()
+                st.success(f"Nộp bài thành công! Điểm của em là: {grade}"); time.sleep(3); st.rerun()
 
 with tab_gv:
     pwd = st.text_input("🔐 Mật khẩu quản lý:", type="password", key="gv_pwd")
@@ -162,6 +163,14 @@ with tab_gv:
                     d_js = parse_docx_smart(f_word)
                     supabase.table("exam_questions").upsert({"ma_de": n_ma, "nội_dung_json": d_js, "ten_lop": t_mon, "ngay_thi": d_thi.strftime("%d/%m/%Y"), "thoi_gian_phut": t_gian}).execute()
                     st.success("Đã đăng đề!"); st.rerun()
+            st.divider()
+            ex_res = supabase.table("exam_questions").select("ma_de").execute()
+            if ex_res.data:
+                ma_xoa = st.selectbox("Xóa đề:", ["-- Chọn --"] + [i['ma_de'] for i in ex_res.data])
+                if ma_xoa != "-- Chọn --" and st.button(f"Xác nhận xóa {ma_xoa}"):
+                    supabase.table("student_results").delete().eq("ma_de", ma_xoa).execute()
+                    supabase.table("exam_questions").delete().eq("ma_de", ma_xoa).execute()
+                    st.rerun()
 
         with col2:
             st.subheader("📊 KẾT QUẢ & IN PHIẾU")
@@ -180,24 +189,25 @@ with tab_gv:
                         chi_tiet = dict(i.split(":") for i in hs['chi_tiet_bai_lam'].split(","))
                         
                         st.markdown(f"""
-                        <div class="print-area" style="background: white; padding: 20px; border: 2px solid #1e3a8a; color: black !important;">
+                        <div class="print-area" style="background: white; padding: 25px; border: 2px solid #1e3a8a; color: black !important;">
                             <h2 style="text-align: center; color: #1e3a8a;">PHIẾU MINH CHỨNG KẾT QUẢ</h2>
                             <p style="text-align: center;">Trường THCS Lê Quý Đôn - Tuyên Quang</p>
                             <hr>
                             <table style="width: 100%; color: black;">
                                 <tr><td><b>Học sinh:</b> {hs['ho_ten'].upper()}</td><td><b>Lớp:</b> {hs['lop']}</td></tr>
-                                <tr><td><b>Môn thi:</b> {hs['lop_thi']}</td><td><b>Mã đề:</b> {hs['ma_de']}</td></tr>
+                                <tr><td><b>Mã đề:</b> {hs['ma_de']}</td><td><b>Môn thi:</b> {hs['lop_thi']}</td></tr>
                                 <tr><td><b>Ngày nộp:</b> {hs['created_at']}</td><td><b>Điểm: {hs['diem']} ({hs['so_cau_dung']})</b></td></tr>
                             </table>
                             <hr>
                         """, unsafe_allow_html=True)
                         for i, q in enumerate(quiz_js):
                             ec = chi_tiet.get(str(i+1), "Chưa chọn")
-                            dung_sai = "✅ Đúng" if ec != "Chưa chọn" and ec.startswith(q['answer'][0]) else f"❌ Sai (Đáp án đúng: <b>{q['answer']}</b>)"
+                            d_dung = q.get('answer', "Không có đáp án")
+                            icon = "✅ Đúng" if (ec != "Chưa chọn" and len(d_dung) > 0 and ec.startswith(d_dung[0])) else f"❌ Sai (Đáp án đúng: <b>{d_dung}</b>)"
                             st.markdown(f"""
-                            <div style="color: black !important; border-bottom: 1px dashed #ccc; padding: 8px 0;">
+                            <div style="color: black !important; border-bottom: 1px dashed #ccc; padding: 10px 0;">
                                 <b>Câu {i+1}:</b> {q['question']}<br>
-                                👉 Em chọn: <b>{ec}</b> | Kết quả: {dung_sai}
+                                👉 Em chọn: <b>{ec}</b> | Kết quả: {icon}
                             </div>
                             """, unsafe_allow_html=True)
                         st.markdown("</div>", unsafe_allow_html=True)
