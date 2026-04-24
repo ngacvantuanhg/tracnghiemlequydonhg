@@ -197,9 +197,10 @@ with tab_gv:
     pwd = st.text_input("🔐 Mật khẩu quản lý:", type="password")
     if pwd == ADMIN_PASSWORD:
         col1, col2 = st.columns([1, 2.5])
+        
         with col1:
-            st.subheader("📤 Đăng đề")
-            n_ma = st.text_input("Mã đề:")
+            st.subheader("📤 Đăng đề mới")
+            n_ma = st.text_input("Mã đề (Ví dụ: 001):")
             t_mon = st.text_input("Môn/Lớp:")
             t_gian = st.number_input("Thời gian (phút):", min_value=1, value=15)
             d_thi = st.date_input("Ngày thi:")
@@ -207,11 +208,61 @@ with tab_gv:
             if st.button("🚀 Kích hoạt"):
                 if n_ma and f_word:
                     d_json = parse_docx_smart(f_word)
-                    supabase.table("exam_questions").upsert({"ma_de": n_ma, "nội_dung_json": d_json, "ten_lop": t_mon, "ngay_thi": d_thi.strftime("%d/%m/%Y"), "thoi_gian_phut": t_gian}).execute()
-                    st.success("Xong!")
-                    st.rerun() # Để cập nhật list mã đề bên Tab học sinh
+                    supabase.table("exam_questions").upsert({
+                        "ma_de": n_ma, "nội_dung_json": d_json, "ten_lop": t_mon, 
+                        "ngay_thi": d_thi.strftime("%d/%m/%Y"), "thoi_gian_phut": t_gian
+                    }).execute()
+                    st.success(f"Đã kích hoạt đề {n_ma}!")
+                    st.rerun()
+
+            st.divider()
+            
+            # --- KHU VỰC QUẢN LÝ XÓA DỮ LIỆU ---
+            st.subheader("🗑️ Quản lý kho đề")
+            
+            # Lấy danh sách đề hiện có để chọn xóa
+            exam_res = supabase.table("exam_questions").select("ma_de, ten_lop").execute()
+            if exam_res.data:
+                list_de_xoa = [f"{item['ma_de']} - {item['ten_lop']}" for item in exam_res.data]
+                de_chon_xoa = st.selectbox("Chọn đề muốn xóa:", ["-- Chọn đề --"] + list_de_xoa)
+                
+                if de_chon_xoa != "-- Chọn đề --":
+                    ma_de_thuc_te = de_chon_xoa.split(" - ")[0]
+                    st.warning(f"⚠️ Lưu ý: Xóa đề **{ma_de_thuc_te}** sẽ xóa sạch cả kết quả thi của học sinh kèm theo.")
+                    
+                    # Nút xác nhận xóa từng đề
+                    if st.button(f"Xác nhận xóa đề {ma_de_thuc_te}"):
+                        # 1. Xóa kết quả thi liên quan
+                        supabase.table("student_results").delete().eq("ma_de", ma_de_thuc_te).execute()
+                        # 2. Xóa chính cái đề đó
+                        supabase.table("exam_questions").delete().eq("ma_de", ma_de_thuc_te).execute()
+                        
+                        st.success(f"Đã xóa sạch sẽ đề {ma_de_thuc_te} và dữ liệu liên quan!")
+                        time.sleep(1)
+                        st.rerun()
+            
+            st.divider()
+            # Nút xóa tất cả (Cần cảnh báo mạnh)
+            st.error("🚨 KHU VỰC NGUY HIỂM")
+            if st.button("🔥 XÓA TẤT CẢ DỮ LIỆU"):
+                st.session_state["confirm_delete_all"] = True
+            
+            if st.session_state.get("confirm_delete_all"):
+                st.warning("Bạn có chắc chắn muốn xóa TOÀN BỘ đề thi và kết quả không? Hành động này không thể hoàn tác!")
+                col_y, col_n = st.columns(2)
+                if col_y.button("CÓ, XÓA HẾT"):
+                    supabase.table("student_results").delete().neq("id", 0).execute()
+                    supabase.table("exam_questions").delete().neq("ma_de", "NULL").execute()
+                    st.session_state["confirm_delete_all"] = False
+                    st.success("Hệ thống đã sạch bóng dữ liệu!")
+                    st.rerun()
+                if col_n.button("KHÔNG, HỦY"):
+                    st.session_state["confirm_delete_all"] = False
+                    st.rerun()
+
         with col2:
-            st.subheader("📊 Kết quả")
+            st.subheader("📊 Bảng điểm & Báo cáo")
+            # (Phần hiển thị bảng điểm và xuất Excel giữ nguyên như bản V21 nhé)
             all_res = supabase.table("student_results").select("*").execute()
             if all_res.data:
                 df = pd.DataFrame(all_res.data)
@@ -220,3 +271,16 @@ with tab_gv:
                 s_lop = st.selectbox("📌 Lớp:", l_lop)
                 f_df = df[df['lop_thi'] == s_lop].sort_values(by="ho_ten")
                 st.dataframe(f_df[["ho_ten", "lop", "so_cau_dung", "diem", "ma_de", "created_at"]], use_container_width=True)
+                
+                # Nút tải Excel (giữ nguyên code cũ)
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                    f_df[["ho_ten", "lop", "so_cau_dung", "diem", "ma_de", "created_at"]].to_excel(writer, index=False, sheet_name='Báo cáo')
+                    workbook, worksheet = writer.book, writer.sheets['Báo cáo']
+                    h_format = workbook.add_format({'bold': True, 'bg_color': '#D1D5DB', 'border': 1, 'align': 'center'})
+                    for c_num, val in enumerate(["Họ và Tên", "Lớp", "Đúng/Tổng", "Điểm", "Mã đề", "Thời gian"]):
+                        worksheet.write(0, c_num, val, h_format)
+                    worksheet.set_column('A:F', 20)
+                st.download_button("📥 Tải Báo cáo Excel", data=output.getvalue(), file_name=f"Bao_cao_{s_lop}.xlsx")
+            else:
+                st.info("Chưa có kết quả thi nào để hiển thị.")
