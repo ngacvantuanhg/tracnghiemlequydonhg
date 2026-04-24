@@ -17,49 +17,33 @@ supabase = create_client(url, key)
 st.set_page_config(page_title="Hệ Thống Thi Lê Quý Đôn", layout="wide", page_icon="🏫")
 ADMIN_PASSWORD = "141983" 
 
-# --- LINK ẢNH NỀN GITHUB (Bạn hãy thay USERNAME và REPO bằng thông tin của bạn) ---
-# Link chuẩn xác dựa trên GitHub của bạn
+# --- LINK ẢNH NỀN GITHUB ---
 bg_img = "https://raw.githubusercontent.com/ngacvantuanhg/tracnghiemlequydonhg/main/Anhnen.png"
 
-# --- STYLE GIAO DIỆN V20: Ô NHẬP LIỆU TRẮNG SÁNG ---
+# --- STYLE GIAO DIỆN V21 (Ô NHẬP LIỆU TRẮNG SÁNG & CĂN GIỮA) ---
 st.markdown(f"""
     <style>
-    /* Hình nền toàn trang */
     .stApp {{
         background-image: url("{bg_img}");
         background-attachment: fixed;
         background-size: cover;
         background-position: center;
     }}
-
-    /* Lớp phủ để nội dung nổi bật */
     .main {{
         background-color: rgba(255, 255, 255, 0.8);
         padding: 2rem;
         border-radius: 20px;
     }}
-
-    /* CĂN GIỮA TIÊU ĐỀ */
     h1, .sub-title {{
         text-align: center !important;
         color: #1e3a8a !important;
     }}
-
-    /* LÀM TRẮNG CÁC Ô NHẬP LIỆU (INPUT BOX) */
     input, div[data-baseweb="input"], div[data-baseweb="select"], .stTextArea textarea {{
         background-color: #ffffff !important;
         color: #1e3a8a !important;
-        border: 1px solid #cbd5e1 !important;
+        border: 2px solid #cbd5e1 !important;
         border-radius: 8px !important;
     }}
-    
-    /* Hiệu ứng khi click vào ô nhập liệu */
-    input:focus {{
-        border: 2px solid #1e3a8a !important;
-        box-shadow: 0 0 5px rgba(30, 58, 138, 0.2) !important;
-    }}
-
-    /* Căn giữa và làm gọn Form */
     [data-testid="stForm"] {{
         background-color: rgba(255, 255, 255, 0.95);
         border: 2px solid #1e3a8a;
@@ -69,8 +53,6 @@ st.markdown(f"""
         max-width: 850px;
         margin: 0 auto !important;
     }}
-
-    /* Nút bấm Navy căn giữa */
     .stButton>button {{
         display: block;
         margin: 0 auto !important;
@@ -80,8 +62,6 @@ st.markdown(f"""
         padding: 10px 40px;
         font-weight: bold;
     }}
-    
-    /* Đồng hồ đếm ngược Navy */
     .timer-box {{ 
         position: fixed; top: 20px; right: 20px; padding: 10px 20px; 
         background: #1e3a8a; color: white; border-radius: 10px;
@@ -90,11 +70,10 @@ st.markdown(f"""
     </style>
     """, unsafe_allow_html=True)
 
-# --- TIÊU ĐỀ ---
 st.markdown("<h1>HỆ THỐNG THI TRỰC TUYẾN</h1>", unsafe_allow_html=True)
 st.markdown("<div class='sub-title'>Trường THCS Lê Quý Đôn, phường Hà Giang 1, tỉnh Tuyên Quang</div>", unsafe_allow_html=True)
 
-# --- HÀM HỖ TRỢ (Giữ nguyên) ---
+# --- HÀM HỖ TRỢ ---
 def format_vietnam_time(utc_time_str):
     try:
         utc_dt = datetime.fromisoformat(utc_time_str.replace('Z', '+00:00'))
@@ -129,79 +108,90 @@ def parse_docx_smart(file):
 tab_hs, tab_gv = st.tabs(["👨‍🎓 PHÒNG THI HỌC SINH", "👩‍🏫 QUẢN TRỊ VIÊN"])
 
 with tab_hs:
-    c1, c2, c3 = st.columns([1, 2, 1])
-    with c2:
-        ma_de_input = st.text_input("🔑 Nhập Mã đề thi cô giáo giao:", placeholder="Ví dụ: 101, 002...")
-    
-    if ma_de_input:
-        res = supabase.table("exam_questions").select("*").eq("ma_de", ma_de_input).execute()
-        if res.data:
-            exam_info = res.data[0]
-            quiz = exam_info["nội_dung_json"]
-            time_limit = exam_info.get('thoi_gian_phut', 15)
+    # Lấy danh sách mã đề từ Database để học sinh chọn
+    exam_list_res = supabase.table("exam_questions").select("ma_de").execute()
+    list_ma_de = [item['ma_de'] for item in exam_list_res.data] if exam_list_res.data else []
+
+    if not st.session_state.get("is_testing", False):
+        with st.form("info_form"):
+            st.subheader("📝 Thông tin thí sinh")
+            name = st.text_input("👤 Họ và Tên của em:", placeholder="Nhập đầy đủ họ tên...")
+            actual_class = st.text_input("🏫 Lớp của em:", placeholder="Ví dụ: 9A1, 9A2...")
+            sel_ma_de = st.selectbox("🔑 Chọn Mã đề thi:", options=["-- Chọn mã đề --"] + list_ma_de)
             
-            if f"started_{ma_de_input}" not in st.session_state:
-                st.session_state[f"started_{ma_de_input}"] = False
+            st.write("---")
+            if st.form_submit_button("🚀 BẮT ĐẦU LÀM BÀI"):
+                if name and actual_class and sel_ma_de != "-- Chọn mã đề --":
+                    # Lấy thông tin đề đã chọn
+                    exam_res = supabase.table("exam_questions").select("*").eq("ma_de", sel_ma_de).execute()
+                    if exam_res.data:
+                        exam_info = exam_res.data[0]
+                        st.session_state["quiz_data"] = exam_info["nội_dung_json"]
+                        st.session_state["time_limit"] = exam_info.get('thoi_gian_phut', 15)
+                        st.session_state["ten_mon"] = exam_info.get('ten_lop')
+                        st.session_state["ngay_thi_chuan"] = exam_info.get('ngay_thi')
+                        st.session_state["ma_de_dang_thi"] = sel_ma_de
+                        st.session_state["st_name"] = name
+                        st.session_state["st_class"] = actual_class
+                        st.session_state["end_time"] = time.time() + (st.session_state["time_limit"] * 60)
+                        st.session_state["is_testing"] = True
+                        st.rerun()
+                else:
+                    st.error("❌ Em hãy điền đủ Họ tên, Lớp và Chọn đúng mã đề nhé!")
+    
+    else:
+        # GIAO DIỆN ĐANG LÀM BÀI
+        time_left = int(st.session_state["end_time"] - time.time())
+        if time_left > 0:
+            mm, ss = divmod(time_left, 60)
+            st.markdown(f'<div class="timer-box"><small>⏳ CÒN LẠI</small><br><b style="font-size:24px;">{mm:02d}:{ss:02d}</b></div>', unsafe_allow_html=True)
+        
+        with st.form("quiz_form"):
+            st.info(f"👨‍🎓: **{st.session_state['st_name'].upper()}** | Lớp: **{st.session_state['st_class']}** | Đề: **{st.session_state['ma_de_dang_thi']}**")
+            user_selections = {}
+            for idx, q in enumerate(st.session_state["quiz_data"]):
+                st.write(f"**Câu {idx+1}: {q['question']}**")
+                user_selections[idx] = st.radio("Chọn đáp án:", q['options'], index=None, key=f"q_{idx}", label_visibility="collapsed")
+                st.write("")
+            
+            st.divider()
+            confirm = st.checkbox("Em xác nhận đã kiểm tra kỹ và muốn nộp bài.")
+            submitted = st.form_submit_button("📤 NỘP BÀI THI")
 
-            if not st.session_state[f"started_{ma_de_input}"]:
-                with st.form("info_form"):
-                    name = st.text_input("👤 Họ và Tên của em:")
-                    actual_class = st.text_input("🏫 Lớp của em:")
-                    st.info(f"📋 Môn thi: {exam_info.get('ten_lop')} | Thời gian: {time_limit} phút")
-                    if st.form_submit_button("🚀 BẮT ĐẦU LÀM BÀI"):
-                        if name and actual_class:
-                            st.session_state[f"started_{ma_de_input}"] = True
-                            st.session_state[f"st_name_{ma_de_input}"] = name
-                            st.session_state[f"st_class_{ma_de_input}"] = actual_class
-                            st.session_state[f"end_time_{ma_de_input}"] = time.time() + (time_limit * 60)
-                            st.rerun()
-                        else: st.error("❌ Em hãy điền đầy đủ thông tin nhé!")
-            else:
-                time_left = int(st.session_state[f"end_time_{ma_de_input}"] - time.time())
-                if time_left > 0:
-                    mm, ss = divmod(time_left, 60)
-                    st.markdown(f'<div class="timer-box"><small>⏳ CÒN LẠI</small><br><b style="font-size:24px;">{mm:02d}:{ss:02d}</b></div>', unsafe_allow_html=True)
+            if submitted or time_left <= 0:
+                if time_left <= 0: st.error("⏰ Hết giờ! Hệ thống tự động nộp bài...")
+                elif not confirm: 
+                    st.error("❌ Em cần tích xác nhận trước khi nộp!")
+                    st.stop()
                 
-                with st.form("quiz_form"):
-                    st.subheader(f"Thí sinh: {st.session_state[f'st_name_{ma_de_input}'].upper()}")
-                    user_selections = {}
-                    for idx, q in enumerate(quiz):
-                        st.write(f"**{q['question']}**")
-                        user_selections[idx] = st.radio("Chọn đáp án:", q['options'], index=None, key=f"q_{ma_de_input}_{idx}", label_visibility="collapsed")
-                        st.write("")
-                    
-                    st.divider()
-                    confirm = st.checkbox("Em xác nhận đã kiểm tra kỹ và muốn nộp bài.")
-                    submitted = st.form_submit_button("📤 NỘP BÀI THI")
+                correct_num = sum(1 for i, q in enumerate(st.session_state["quiz_data"]) if user_selections[i] and user_selections[i].startswith(q['answer']))
+                grade = round((correct_num / len(st.session_state["quiz_data"])) * 10, 2)
+                
+                supabase.table("student_results").insert({
+                    "ma_de": st.session_state["ma_de_dang_thi"], "ho_ten": st.session_state["st_name"], 
+                    "lop": st.session_state["st_class"], "diem": grade, 
+                    "so_cau_dung": f"{correct_num}/{len(st.session_state['quiz_data'])}", 
+                    "lop_thi": st.session_state["ten_mon"], "ngay_thi": st.session_state["ngay_thi_chuan"]
+                }).execute()
 
-                    if submitted or time_left <= 0:
-                        correct_num = sum(1 for i, q in enumerate(quiz) if user_selections[i] and user_selections[i].startswith(q['answer']))
-                        grade = round((correct_num / len(quiz)) * 10, 2)
-                        
-                        supabase.table("student_results").insert({
-                            "ma_de": ma_de_input, "ho_ten": st.session_state[f"st_name_{ma_de_input}"], 
-                            "lop": st.session_state[f"st_class_{ma_de_input}"], "diem": grade, 
-                            "so_cau_dung": f"{correct_num}/{len(quiz)}", "lop_thi": exam_info.get('ten_lop'), 
-                            "ngay_thi": exam_info.get('ngay_thi')
-                        }).execute()
+                st.markdown("---")
+                if grade < 5:
+                    st.markdown("<h1 style='font-size:80px;'>😔</h1>", unsafe_allow_html=True)
+                    st.error(f"### Điểm của em: {grade}. Cố gắng hơn nhé!")
+                elif grade <= 7:
+                    st.markdown("<h1 style='font-size:80px;'>🙂</h1>", unsafe_allow_html=True)
+                    st.warning(f"### Điểm của em: {grade}. Khá tốt!")
+                else:
+                    st.balloons(); st.snow()
+                    st.markdown("<h1 style='font-size:80px;'>🎉 😍 🎉</h1>", unsafe_allow_html=True)
+                    st.success(f"### Điểm tuyệt vời: {grade}!")
+                
+                st.session_state["is_testing"] = False
+                st.stop()
 
-                        st.markdown("---")
-                        if grade < 5:
-                            st.markdown("<h1 style='font-size:80px;'>😔</h1>", unsafe_allow_html=True)
-                            st.error(f"Điểm của em: {grade}. Cố gắng hơn nhé!")
-                        elif grade <= 7:
-                            st.markdown("<h1 style='font-size:80px;'>🙂</h1>", unsafe_allow_html=True)
-                            st.warning(f"Điểm của em: {grade}. Khá tốt!")
-                        else:
-                            st.balloons(); st.snow()
-                            st.markdown("<h1 style='font-size:80px;'>🎉 😍 🎉</h1>", unsafe_allow_html=True)
-                            st.success(f"Điểm tuyệt vời: {grade}!")
-                        
-                        del st.session_state[f"started_{ma_de_input}"]
-                        st.stop()
-                if time_left > 0:
-                    time.sleep(1)
-                    st.rerun()
+        if time_left > 0:
+            time.sleep(1)
+            st.rerun()
 
 with tab_gv:
     pwd = st.text_input("🔐 Mật khẩu quản lý:", type="password")
@@ -209,22 +199,24 @@ with tab_gv:
         col1, col2 = st.columns([1, 2.5])
         with col1:
             st.subheader("📤 Đăng đề")
-            new_ma = st.text_input("Mã đề:")
-            ten_lop = st.text_input("Môn/Lớp:")
-            thoi_gian = st.number_input("Thời gian (phút):", min_value=1, value=15)
-            ngay_thi = st.date_input("Ngày thi:")
-            word_file = st.file_uploader("Tải Word:", type=["docx"])
+            n_ma = st.text_input("Mã đề:")
+            t_mon = st.text_input("Môn/Lớp:")
+            t_gian = st.number_input("Thời gian (phút):", min_value=1, value=15)
+            d_thi = st.date_input("Ngày thi:")
+            f_word = st.file_uploader("Tải Word:", type=["docx"])
             if st.button("🚀 Kích hoạt"):
-                if new_ma and word_file:
-                    data = parse_docx_smart(word_file)
-                    supabase.table("exam_questions").upsert({"ma_de": new_ma, "nội_dung_json": data, "ten_lop": ten_lop, "ngay_thi": ngay_thi.strftime("%d/%m/%Y"), "thoi_gian_phut": thoi_gian}).execute()
+                if n_ma and f_word:
+                    d_json = parse_docx_smart(f_word)
+                    supabase.table("exam_questions").upsert({"ma_de": n_ma, "nội_dung_json": d_json, "ten_lop": t_mon, "ngay_thi": d_thi.strftime("%d/%m/%Y"), "thoi_gian_phut": t_gian}).execute()
                     st.success("Xong!")
+                    st.rerun() # Để cập nhật list mã đề bên Tab học sinh
         with col2:
             st.subheader("📊 Kết quả")
             all_res = supabase.table("student_results").select("*").execute()
             if all_res.data:
                 df = pd.DataFrame(all_res.data)
-                list_lop = sorted(df['lop_thi'].dropna().unique().tolist())
-                sel_lop = st.selectbox("📌 Lớp:", list_lop)
-                final_df = df[df['lop_thi'] == sel_lop].sort_values(by="ho_ten")
-                st.dataframe(final_df[["ho_ten", "lop", "so_cau_dung", "diem", "ma_de"]], use_container_width=True)
+                df['created_at'] = df['created_at'].apply(format_vietnam_time)
+                l_lop = sorted(df['lop_thi'].dropna().unique().tolist())
+                s_lop = st.selectbox("📌 Lớp:", l_lop)
+                f_df = df[df['lop_thi'] == s_lop].sort_values(by="ho_ten")
+                st.dataframe(f_df[["ho_ten", "lop", "so_cau_dung", "diem", "ma_de", "created_at"]], use_container_width=True)
