@@ -35,7 +35,7 @@ st.markdown(f"""
     </style>
     """, unsafe_allow_html=True)
 
-# --- HÀM TẠO PDF MINH CHỨNG ---
+# --- HÀM TẠO PDF (Bản tiếng Việt không dấu để an toàn) ---
 def create_pdf_report(hs_name, hs_class, mon, lop_thi, ma_de, ngay, diem, so_cau):
     pdf = FPDF()
     pdf.add_page()
@@ -45,24 +45,20 @@ def create_pdf_report(hs_name, hs_class, mon, lop_thi, ma_de, ngay, diem, so_cau
     pdf.cell(200, 10, txt="Truong THCS Le Quy Don - Tuyen Quang", ln=True, align='C')
     pdf.ln(10)
     pdf.line(10, 30, 200, 30)
-    
     pdf.set_font("Helvetica", 'B', 12)
     data = [
         ["Ho va ten hoc sinh:", hs_name.upper()],
-        ["Lop hoc sinh:", hs_class],
+        ["Lop cua hoc sinh:", hs_class],
         ["Mon kiem tra:", mon],
-        ["Lop kiem tra:", lop_thi],
-        ["Ma de thi:", ma_de],
+        ["Lop kiem tra (Ma de):", f"{lop_thi} ({ma_de})"],
         ["Ngay thi:", ngay],
         ["Ket qua dat duoc:", f"{diem} diem ({so_cau})"]
     ]
-    
     pdf.ln(10)
     for row in data:
         pdf.cell(60, 10, txt=row[0], border=0)
         pdf.cell(100, 10, txt=str(row[1]), border=0)
         pdf.ln(8)
-        
     pdf.ln(20)
     pdf.cell(90, 10, txt="GIAO VIEN BO MON", align='C')
     pdf.cell(90, 10, txt="HOC SINH XAC NHAN", align='C')
@@ -70,7 +66,6 @@ def create_pdf_report(hs_name, hs_class, mon, lop_thi, ma_de, ngay, diem, so_cau
     pdf.set_font("Helvetica", 'I', 10)
     pdf.cell(90, 10, txt="(Ky va ghi ro ho ten)", align='C')
     pdf.cell(90, 10, txt="(Ky va ghi ro ho ten)", align='C')
-    
     return pdf.output(dest='S').encode('latin-1', 'ignore')
 
 # --- HÀM ĐỌC ĐỀ WORD ---
@@ -105,29 +100,24 @@ st.markdown("<div class='sub-title'>Trường THCS Lê Quý Đôn, phường Hà
 tab_hs, tab_gv = st.tabs(["👨‍🎓 PHÒNG THI HỌC SINH", "👩‍🏫 QUẢN TRỊ VIÊN"])
 
 with tab_hs:
-    # Lấy toàn bộ danh sách đề thi để xử lý lọc
-    exam_data_res = supabase.table("exam_questions").select("ten_mon, ma_de").execute()
-    all_exams = exam_data_res.data if exam_data_res.data else []
-    
-    # Tạo danh sách các môn học duy nhất
-    list_subjects = sorted(list(set([item['ten_mon'] for item in all_exams])))
+    try:
+        exam_data_res = supabase.table("exam_questions").select("ten_mon, ma_de").execute()
+        all_exams = exam_data_res.data if exam_data_res.data else []
+        list_subjects = sorted(list(set([item.get('ten_mon', 'Chưa đặt tên') for item in all_exams])))
+    except Exception as e:
+        st.warning("⚠️ Đang cập nhật hệ thống dữ liệu. Vui lòng đợi trong giây lát hoặc liên hệ quản trị viên.")
+        all_exams = []
+        list_subjects = []
 
     if not st.session_state.get("is_testing", False):
         with st.form("info_form"):
             st.subheader("📝 Đăng ký thông tin dự thi")
-            name = st.text_input("👤 Họ và Tên của em:", placeholder="Nhập đầy đủ họ tên...")
-            actual_class = st.text_input("🏫 Lớp của em:", placeholder="Ví dụ: 9A1...")
-            
-            # --- Ô CHỌN MÔN HỌC ---
+            name = st.text_input("👤 Họ và Tên của em:")
+            actual_class = st.text_input("🏫 Lớp của em:")
             sel_subject = st.selectbox("📚 Chọn Môn học:", options=["-- Chọn môn --"] + list_subjects)
-            
-            # Lọc mã đề theo môn đã chọn
-            filtered_ma_de = [item['ma_de'] for item in all_exams if item['ten_mon'] == sel_subject]
-            
-            # --- Ô CHỌN MÃ ĐỀ ---
+            filtered_ma_de = [item['ma_de'] for item in all_exams if item.get('ten_mon') == sel_subject]
             sel_ma_de = st.selectbox("🔑 Chọn Mã đề thi:", options=["-- Chọn mã đề --"] + filtered_ma_de)
             
-            st.write("---")
             if st.form_submit_button("🚀 BẮT ĐẦU LÀM BÀI"):
                 if name and actual_class and sel_subject != "-- Chọn môn --" and sel_ma_de != "-- Chọn mã đề --":
                     ex_res = supabase.table("exam_questions").select("*").eq("ma_de", sel_ma_de).execute()
@@ -136,30 +126,23 @@ with tab_hs:
                         st.session_state.update({
                             "quiz_data": ex_info["nội_dung_json"], "time_limit": ex_info.get('thoi_gian_phut', 15),
                             "ma_de_dang_thi": sel_ma_de, "st_name": name, "st_class": actual_class,
-                            "is_testing": True, 
-                            "mon_hoc": ex_info.get('ten_mon'), 
-                            "lop_kiem_tra": ex_info.get('ten_lop'), 
-                            "ngay_thi": ex_info.get('ngay_thi')
+                            "is_testing": True, "mon_hoc": ex_info.get('ten_mon'), 
+                            "lop_kiem_tra": ex_info.get('ten_lop'), "ngay_thi": ex_info.get('ngay_thi')
                         })
                         st.rerun()
-                else: st.error("❌ Em hãy điền đầy đủ thông tin, môn học và mã đề nhé!")
+                else: st.error("❌ Vui lòng điền đủ thông tin!")
     else:
-        # Giao diện làm bài (Giữ nguyên)
         with st.form("quiz_form"):
-            st.markdown(f"### MÔN THI: {st.session_state['mon_hoc'].upper()}")
-            st.info(f"👨‍🎓: **{st.session_state['st_name'].upper()}** | Lớp: **{st.session_state['st_class']}** | Mã đề: **{st.session_state['ma_de_dang_thi']}**")
+            st.markdown(f"### MÔN THI: {st.session_state.get('mon_hoc', '').upper()}")
+            st.info(f"👨‍🎓: **{st.session_state['st_name'].upper()}** | Lớp: **{st.session_state['st_class']}**")
             u_choices = {}
             for idx, q in enumerate(st.session_state["quiz_data"]):
-                st.write(f"**{q['question']}**")
+                st.write(f"**{idx+1}. {q['question']}**")
                 u_choices[idx] = st.radio("Chọn đáp án:", q['options'], index=None, key=f"q_{idx}", label_visibility="collapsed")
-            st.write("---")
-            confirm = st.checkbox("Em xác nhận đã kiểm tra kỹ bài làm và muốn nộp bài.")
+            confirm = st.checkbox("Em xác nhận đã kiểm tra kỹ bài làm.")
             if st.form_submit_button("📤 NỘP BÀI THI"):
-                if not confirm: st.error("❌ Em hãy tích vào ô xác nhận nộp bài nhé!"); st.stop()
-                c_num = 0
-                for i, q in enumerate(st.session_state["quiz_data"]):
-                    ans_k = q.get('answer_key', "")
-                    if u_choices[i] and ans_k and u_choices[i].startswith(ans_k): c_num += 1
+                if not confirm: st.error("❌ Hãy tích xác nhận nộp bài!"); st.stop()
+                c_num = sum(1 for i, q in enumerate(st.session_state["quiz_data"]) if u_choices[i] and u_choices[i].startswith(q.get('answer_key', '')))
                 grade = round((c_num / len(st.session_state["quiz_data"])) * 10, 2)
                 supabase.table("student_results").insert({
                     "ma_de": st.session_state["ma_de_dang_thi"], "ho_ten": st.session_state["st_name"], 
@@ -167,43 +150,38 @@ with tab_hs:
                     "lop_thi": st.session_state["mon_hoc"], "lop_kiem_tra": st.session_state["lop_kiem_tra"], "ngay_thi": st.session_state["ngay_thi"]
                 }).execute()
                 st.session_state["is_testing"] = False
-                if grade >= 8: st.balloons()
                 st.success(f"Nộp bài thành công! Điểm: {grade}"); time.sleep(2); st.rerun()
 
 with tab_gv:
-    # Quản trị viên (Giữ nguyên phần đăng đề tách ô Môn và Lớp)
-    pwd = st.text_input("🔐 Mật khẩu quản trị:", type="password", key="gv_pwd")
+    pwd = st.text_input("🔐 Mật khẩu quản trị:", type="password")
     if pwd == ADMIN_PASSWORD:
         col1, col2 = st.columns([1, 1.8])
         with col1:
             st.subheader("📤 ĐĂNG ĐỀ THI")
             n_ma = st.text_input("Mã đề thi:")
-            t_mon = st.text_input("Môn học (Toán, Lý,...)")
-            t_lop = st.text_input("Lớp kiểm tra (9A1, 9A2...)")
+            t_mon = st.text_input("Môn học:")
+            t_lop = st.text_input("Lớp kiểm tra:")
             t_gian = st.number_input("Thời gian (phút):", min_value=1, value=15)
             d_thi = st.date_input("Ngày thi:")
-            f_word = st.file_uploader("Tải tệp đề Word:", type=["docx"])
+            f_word = st.file_uploader("Tải tệp Word:", type=["docx"])
             if st.button("🚀 Kích hoạt đề"):
                 if n_ma and t_mon and t_lop and f_word:
                     d_js = parse_docx_simple(f_word)
                     supabase.table("exam_questions").upsert({
-                        "ma_de": n_ma, "nội_dung_json": d_js, 
-                        "ten_mon": t_mon, "ten_lop": t_lop, 
+                        "ma_de": n_ma, "nội_dung_json": d_js, "ten_mon": t_mon, "ten_lop": t_lop, 
                         "ngay_thi": d_thi.strftime("%d/%m/%Y"), "thoi_gian_phut": t_gian
                     }).execute()
-                    st.success("Đã đăng đề thành công!"); time.sleep(1); st.rerun()
-            st.divider()
-            if st.button("🔥 Xóa sạch kết quả"):
-                supabase.table("student_results").delete().neq("id", 0).execute(); st.rerun()
+                    st.success("Đã đăng đề!"); time.sleep(1); st.rerun()
         with col2:
-            st.subheader("📊 KẾT QUẢ VÀ TẢI PHIẾU")
-            res_all = supabase.table("student_results").select("*").execute()
-            if res_all.data:
-                df = pd.DataFrame(res_all.data).sort_values(by="ho_ten")
-                st.dataframe(df[["ho_ten", "lop", "so_cau_dung", "diem", "ma_de"]], use_container_width=True)
-                st.write("---")
-                sel_hs = st.selectbox("🖨️ Chọn học sinh xuất phiếu PDF:", ["-- Chọn học sinh --"] + df['ho_ten'].tolist())
-                if sel_hs != "-- Chọn học sinh --":
-                    hs = df[df['ho_ten'] == sel_hs].iloc[0]
-                    pdf_data = create_pdf_report(hs['ho_ten'], hs['lop'], hs['lop_thi'], hs.get('lop_kiem_tra', 'N/A'), hs['ma_de'], hs['ngay_thi'], hs['diem'], hs['so_cau_dung'])
-                    st.download_button(label=f"📥 Tải Phiếu ({hs['ho_ten']})", data=pdf_data, file_name=f"Minh_chung_{hs['ho_ten']}.pdf", mime="application/pdf")
+            st.subheader("📊 KẾT QUẢ")
+            try:
+                res_all = supabase.table("student_results").select("*").execute()
+                if res_all.data:
+                    df = pd.DataFrame(res_all.data).sort_values(by="ho_ten")
+                    st.dataframe(df[["ho_ten", "lop", "so_cau_dung", "diem", "ma_de"]], use_container_width=True)
+                    sel_hs = st.selectbox("🖨️ Chọn học sinh xuất phiếu:", ["-- Chọn --"] + df['ho_ten'].tolist())
+                    if sel_hs != "-- Chọn --":
+                        hs = df[df['ho_ten'] == sel_hs].iloc[0]
+                        pdf_data = create_pdf_report(hs['ho_ten'], hs['lop'], hs.get('lop_thi',''), hs.get('lop_kiem_tra',''), hs['ma_de'], hs['ngay_thi'], hs['diem'], hs['so_cau_dung'])
+                        st.download_button(label=f"📥 Tải Phiếu ({hs['ho_ten']})", data=pdf_data, file_name=f"Phieu_{hs['ho_ten']}.pdf", mime="application/pdf")
+            except: st.info("Chưa có kết quả thi.")
