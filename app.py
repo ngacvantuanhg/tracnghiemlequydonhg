@@ -25,7 +25,7 @@ st.markdown(f"""
     .stApp {{ background-image: url("{bg_img}"); background-attachment: fixed; background-size: cover; background-position: center; }}
     .main {{ background-color: rgba(255, 255, 255, 0.85); padding: 2rem; border-radius: 20px; }}
     h1, .sub-title {{ text-align: center !important; color: #1e3a8a !important; }}
-    div[data-baseweb="input"], div[data-baseweb="select"] {{
+    div[data-baseweb="input"], div[data-baseweb="select"], div[data-baseweb="datepicker"] {{
         background-color: #ffffff !important; border: 2px solid #cbd5e1 !important; border-radius: 8px !important;
     }}
     [data-testid="stForm"] {{
@@ -35,12 +35,10 @@ st.markdown(f"""
     </style>
     """, unsafe_allow_html=True)
 
-# --- HÀM TẠO PDF MINH CHỨNG (Dùng thư viện FPDF) ---
-def create_pdf_report(hs_name, hs_class, mon, ma_de, ngay, diem, so_cau):
+# --- HÀM TẠO PDF MINH CHỨNG (Không dấu để tránh lỗi font Latin-1) ---
+def create_pdf_report(hs_name, hs_class, mon, lop_thi, ma_de, ngay, diem, so_cau):
     pdf = FPDF()
     pdf.add_page()
-    # Sử dụng font mặc định của FPDF (Helvetica) - Lưu ý: FPDF mặc định không hỗ trợ tiếng Việt có dấu tốt
-    # Để in tiếng Việt chuẩn PDF, ta sẽ dùng định dạng bảng đơn giản.
     pdf.set_font("Helvetica", 'B', 16)
     pdf.cell(200, 10, txt="PHIEU MINH CHUNG KET QUA KIEM TRA", ln=True, align='C')
     pdf.set_font("Helvetica", size=12)
@@ -49,39 +47,34 @@ def create_pdf_report(hs_name, hs_class, mon, ma_de, ngay, diem, so_cau):
     pdf.line(10, 30, 200, 30)
     
     pdf.set_font("Helvetica", 'B', 12)
+    # Loại bỏ dấu tiếng Việt để xuất PDF an toàn (vì FPDF cơ bản kén font Unicode)
     data = [
-        ["Ho va ten:", hs_name.upper()],
-        ["Lop:", hs_class],
-        ["Mon thi:", mon],
-        ["Ma de:", ma_de],
+        ["Ho va ten hoc sinh:", hs_name.upper()],
+        ["Lop hoc sinh:", hs_class],
+        ["Mon kiem tra:", mon],
+        ["Lop kiem tra:", lop_thi],
+        ["Ma de thi:", ma_de],
         ["Ngay thi:", ngay],
-        ["Ket qua:", f"{diem} diem ({so_cau})"]
+        ["Ket qua dat duoc:", f"{diem} diem ({so_cau})"]
     ]
     
     pdf.ln(10)
     for row in data:
-        pdf.cell(50, 10, txt=row[0], border=0)
+        pdf.cell(60, 10, txt=row[0], border=0)
         pdf.cell(100, 10, txt=str(row[1]), border=0)
         pdf.ln(8)
         
     pdf.ln(20)
     pdf.cell(90, 10, txt="GIAO VIEN BO MON", align='C')
     pdf.cell(90, 10, txt="HOC SINH XAC NHAN", align='C')
-    pdf.ln(5)
+    pdf.ln(25)
     pdf.set_font("Helvetica", 'I', 10)
     pdf.cell(90, 10, txt="(Ky va ghi ro ho ten)", align='C')
     pdf.cell(90, 10, txt="(Ky va ghi ro ho ten)", align='C')
     
-    return pdf.output(dest='S').encode('latin-1')
+    return pdf.output(dest='S').encode('latin-1', 'ignore')
 
-# --- HÀM HỖ TRỢ KHÁC (Giữ nguyên) ---
-def format_vietnam_time(utc_time_str):
-    try:
-        utc_dt = datetime.fromisoformat(utc_time_str.replace('Z', '+00:00'))
-        vn_tz = pytz.timezone('Asia/Ho_Chi_Minh')
-        return utc_dt.astimezone(vn_tz).strftime("%H:%M:%S %d/%m/%Y")
-    except: return utc_time_str
-
+# --- HÀM HỖ TRỢ ĐỌC ĐỀ WORD ---
 def parse_docx_simple(file):
     doc = Document(file)
     questions = []
@@ -100,12 +93,13 @@ def parse_docx_simple(file):
             label = parts[j].strip().upper()[0]
             val = parts[j+1].replace('[[DUNG]]', '').replace('[[HET]]', '').strip()
             options_dict[label] = f"{label}. {val}"
-            if "[[DUNG]]" in parts[j+1]: ans_k = label
+            if "[[DUNG]]" in parts[j+1]: ans_key = label
         sorted_options = [options_dict[k] for k in sorted(options_dict.keys())]
-        if sorted_options: questions.append({"question": f"{header} {question_text}", "options": sorted_options, "answer_key": ans_k})
+        if sorted_options:
+            questions.append({"question": f"{header} {question_text}", "options": sorted_options, "answer_key": ans_key})
     return questions
 
-# --- GIAO DIỆN ---
+# --- TIÊU ĐỀ ---
 st.markdown("<h1>HỆ THỐNG THI TRỰC TUYẾN</h1>", unsafe_allow_html=True)
 st.markdown("<div class='sub-title'>Trường THCS Lê Quý Đôn, phường Hà Giang 1, tỉnh Tuyên Quang</div>", unsafe_allow_html=True)
 
@@ -118,8 +112,8 @@ with tab_hs:
     if not st.session_state.get("is_testing", False):
         with st.form("info_form"):
             st.subheader("📝 Thông tin thí sinh")
-            name = st.text_input("👤 Họ và Tên của em:")
-            actual_class = st.text_input("🏫 Lớp của em:")
+            name = st.text_input("👤 Họ và Tên của em:", placeholder="Nhập đầy đủ họ tên...")
+            actual_class = st.text_input("🏫 Lớp của em:", placeholder="Ví dụ: 9A1...")
             sel_ma_de = st.selectbox("🔑 Chọn Mã đề thi:", options=["-- Chọn mã đề --"] + list_ma_de)
             if st.form_submit_button("🚀 BẮT ĐẦU LÀM BÀI"):
                 if name and actual_class and sel_ma_de != "-- Chọn mã đề --":
@@ -129,13 +123,14 @@ with tab_hs:
                         st.session_state.update({
                             "quiz_data": ex_info["nội_dung_json"], "time_limit": ex_info.get('thoi_gian_phut', 15),
                             "ma_de_dang_thi": sel_ma_de, "st_name": name, "st_class": actual_class,
-                            "is_testing": True, "mon_lop": ex_info.get('ten_lop'), "ngay_thi": ex_info.get('ngay_thi')
+                            "is_testing": True, "mon": ex_info.get('ten_mon'), 
+                            "lop_thi": ex_info.get('ten_lop'), "ngay_thi": ex_info.get('ngay_thi')
                         })
                         st.rerun()
                 else: st.error("❌ Em hãy điền đầy đủ thông tin nhé!")
     else:
         with st.form("quiz_form"):
-            st.info(f"👨‍🎓: **{st.session_state['st_name'].upper()}** | Lớp: **{st.session_state['st_class']}** | Đề: **{st.session_state['ma_de_dang_thi']}**")
+            st.info(f"👨‍🎓: **{st.session_state['st_name'].upper()}** | Lớp: **{st.session_state['st_class']}** | Môn: **{st.session_state['mon']}**")
             u_choices = {}
             for idx, q in enumerate(st.session_state["quiz_data"]):
                 st.write(f"**{q['question']}**")
@@ -157,12 +152,12 @@ with tab_hs:
                 supabase.table("student_results").insert({
                     "ma_de": st.session_state["ma_de_dang_thi"], "ho_ten": st.session_state["st_name"], 
                     "lop": st.session_state["st_class"], "diem": grade, "so_cau_dung": f"{c_num}/{len(st.session_state['quiz_data'])}",
-                    "lop_thi": st.session_state["mon_lop"], "ngay_thi": st.session_state["ngay_thi"]
+                    "lop_thi": st.session_state["mon"], "lop_kiem_tra": st.session_state["lop_thi"], "ngay_thi": st.session_state["ngay_thi"]
                 }).execute()
                 
                 st.session_state["is_testing"] = False
                 if grade >= 8: st.balloons()
-                st.success(f"Nộp bài thành công! Điểm: {grade}"); time.sleep(2); st.rerun()
+                st.success(f"Nộp bài thành công! Điểm của em: {grade}"); time.sleep(2); st.rerun()
 
 with tab_gv:
     pwd = st.text_input("🔐 Mật khẩu quản lý:", type="password", key="gv_pwd")
@@ -170,14 +165,22 @@ with tab_gv:
         col1, col2 = st.columns([1, 1.8])
         with col1:
             st.subheader("📤 QUẢN LÝ ĐỀ")
-            n_ma = st.text_input("Mã đề:"); t_mon = st.text_input("Môn/Lớp:")
+            n_ma = st.text_input("Mã đề thi:")
+            t_mon = st.text_input("Môn học:")
+            t_lop = st.text_input("Lớp thi (Ví dụ: 9A1):")
             t_gian = st.number_input("Thời gian (phút):", min_value=1, value=15)
-            d_thi = st.date_input("Ngày thi:"); f_word = st.file_uploader("Tải Word:", type=["docx"])
+            d_thi = st.date_input("Ngày thi:")
+            f_word = st.file_uploader("Tải tệp Word đề thi:", type=["docx"])
+            
             if st.button("🚀 Kích hoạt đề"):
-                if n_ma and f_word:
+                if n_ma and t_mon and t_lop and f_word:
                     d_js = parse_docx_simple(f_word)
-                    supabase.table("exam_questions").upsert({"ma_de": n_ma, "nội_dung_json": d_js, "ten_lop": t_mon, "ngay_thi": d_thi.strftime("%d/%m/%Y"), "thoi_gian_phut": t_gian}).execute()
-                    st.success("Xong!"); time.sleep(1); st.rerun()
+                    supabase.table("exam_questions").upsert({
+                        "ma_de": n_ma, "nội_dung_json": d_js, 
+                        "ten_mon": t_mon, "ten_lop": t_lop, 
+                        "ngay_thi": d_thi.strftime("%d/%m/%Y"), "thoi_gian_phut": t_gian
+                    }).execute()
+                    st.success("Đã đăng đề thi thành công!"); time.sleep(1); st.rerun()
             st.divider()
             if st.button("🔥 Xóa sạch kết quả"):
                 supabase.table("student_results").delete().neq("id", 0).execute(); st.rerun()
@@ -190,19 +193,9 @@ with tab_gv:
                 st.dataframe(df[["ho_ten", "lop", "so_cau_dung", "diem", "ma_de"]], use_container_width=True)
                 
                 st.write("---")
-                sel_hs = st.selectbox("🖨️ Chọn học sinh tải Phiếu minh chứng:", ["-- Chọn --"] + df['ho_ten'].tolist())
+                sel_hs = st.selectbox("🖨️ Chọn học sinh tải Phiếu:", ["-- Chọn --"] + df['ho_ten'].tolist())
                 if sel_hs != "-- Chọn --":
                     hs = df[df['ho_ten'] == sel_hs].iloc[0]
-                    
-                    # Nút tải PDF trực tiếp
-                    try:
-                        pdf_data = create_pdf_report(hs['ho_ten'], hs['lop'], hs['lop_thi'], hs['ma_de'], hs['ngay_thi'], hs['diem'], hs['so_cau_dung'])
-                        st.download_button(
-                            label=f"📥 Tải Phiếu Minh Chứng ({hs['ho_ten']})",
-                            data=pdf_data,
-                            file_name=f"Phieu_Diem_{hs['ho_ten']}.pdf",
-                            mime="application/pdf"
-                        )
-                        st.success("Bấm nút trên để tải file PDF về máy và in nhé!")
-                    except Exception as e:
-                        st.error(f"Lỗi tạo PDF: {e}")
+                    # Tải PDF
+                    pdf_data = create_pdf_report(hs['ho_ten'], hs['lop'], hs['lop_thi'], hs.get('lop_kiem_tra', 'N/A'), hs['ma_de'], hs['ngay_thi'], hs['diem'], hs['so_cau_dung'])
+                    st.download_button(label=f"📥 Tải Phiếu ({hs['ho_ten']})", data=pdf_data, file_name=f"Phieu_Diem_{hs['ho_ten']}.pdf", mime="application/pdf")
