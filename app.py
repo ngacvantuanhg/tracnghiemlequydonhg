@@ -171,7 +171,7 @@ with tab_gv:
                     st.markdown(f"""
                     <div class='printable-card'>
                         <h3 style='text-align: center; color: #1e3a8a;'>PHIẾU MINH CHỨNG KẾT QUẢ KIỂM TRA</h3>
-                        <p style='text-align: center;'>Trường THCS Lê Quý Đôn - Tuyên Quang</p>
+                        <p style='text-align: center;'>Trường THCS Lê Quý Đôn, phường Hà Giang 1, tỉnh Tuyên Quang</p>
                         <hr>
                         <table style='width: 100%; font-size: 1.1em; line-height: 2.2em; color: black;'>
                             <tr><td width='40%'><b>Học sinh:</b></td><td>{hs['ho_ten'].upper()}</td></tr>
@@ -207,7 +207,7 @@ with tab_gv:
                     <body onload="window.print()">
                         <div class="container">
                             <h2>PHIẾU MINH CHỨNG KẾT QUẢ KIỂM TRA</h2>
-                            <p style="text-align: center;">Trường THCS Lê Quý Đôn - Tuyên Quang</p>
+                            <p style="text-align: center;">Trường THCS Lê Quý Đôn, phường Hà Giang 1, tỉnh Tuyên Quang</p>
                             <hr>
                             <table>
                                 <tr><td width="40%"><b>Họ và tên học sinh:</b></td><td>{hs['ho_ten'].upper()}</td></tr>
