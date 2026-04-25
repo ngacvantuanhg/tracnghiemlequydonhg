@@ -6,3 +6,4 @@ pandas
 pytz
 xlsxwriter
 plotly
+fpdf
