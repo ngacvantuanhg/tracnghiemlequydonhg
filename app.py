@@ -7,6 +7,7 @@ from datetime import datetime
 import pytz
 import io
 import time
+from fpdf import FPDF
 
 # --- KẾT NỐI HỆ THỐNG ---
 url = st.secrets["SUPABASE_URL"]
@@ -18,28 +19,62 @@ ADMIN_PASSWORD = "141983"
 
 bg_img = "https://raw.githubusercontent.com/ngacvantuanhg/tracnghiemlequydonhg/main/Anhnen.png"
 
-# --- STYLE GIAO DIỆN V34 ---
+# --- STYLE GIAO DIỆN ---
 st.markdown(f"""
     <style>
     .stApp {{ background-image: url("{bg_img}"); background-attachment: fixed; background-size: cover; background-position: center; }}
     .main {{ background-color: rgba(255, 255, 255, 0.85); padding: 2rem; border-radius: 20px; }}
     h1, .sub-title {{ text-align: center !important; color: #1e3a8a !important; }}
-    div[data-baseweb="input"], div[data-baseweb="select"], div[data-baseweb="datepicker"] {{
+    div[data-baseweb="input"], div[data-baseweb="select"] {{
         background-color: #ffffff !important; border: 2px solid #cbd5e1 !important; border-radius: 8px !important;
     }}
     [data-testid="stForm"] {{
         background-color: rgba(255, 255, 255, 0.95); border: 2px solid #1e3a8a;
         border-radius: 15px; padding: 2rem; max-width: 850px; margin: 0 auto !important;
     }}
-    @media print {{
-        header, footer, .stTabs, [data-testid="stHeader"], [data-testid="stSidebar"], .no-print, button, .stButton {{ display: none !important; }}
-        .main {{ background: white !important; padding: 0 !important; width: 100% !important; }}
-        .print-area {{ display: block !important; width: 100% !important; color: black !important; }}
-    }}
     </style>
     """, unsafe_allow_html=True)
 
-# --- HÀM HỖ TRỢ ---
+# --- HÀM TẠO PDF MINH CHỨNG (Dùng thư viện FPDF) ---
+def create_pdf_report(hs_name, hs_class, mon, ma_de, ngay, diem, so_cau):
+    pdf = FPDF()
+    pdf.add_page()
+    # Sử dụng font mặc định của FPDF (Helvetica) - Lưu ý: FPDF mặc định không hỗ trợ tiếng Việt có dấu tốt
+    # Để in tiếng Việt chuẩn PDF, ta sẽ dùng định dạng bảng đơn giản.
+    pdf.set_font("Helvetica", 'B', 16)
+    pdf.cell(200, 10, txt="PHIEU MINH CHUNG KET QUA KIEM TRA", ln=True, align='C')
+    pdf.set_font("Helvetica", size=12)
+    pdf.cell(200, 10, txt="Truong THCS Le Quy Don - Tuyen Quang", ln=True, align='C')
+    pdf.ln(10)
+    pdf.line(10, 30, 200, 30)
+    
+    pdf.set_font("Helvetica", 'B', 12)
+    data = [
+        ["Ho va ten:", hs_name.upper()],
+        ["Lop:", hs_class],
+        ["Mon thi:", mon],
+        ["Ma de:", ma_de],
+        ["Ngay thi:", ngay],
+        ["Ket qua:", f"{diem} diem ({so_cau})"]
+    ]
+    
+    pdf.ln(10)
+    for row in data:
+        pdf.cell(50, 10, txt=row[0], border=0)
+        pdf.cell(100, 10, txt=str(row[1]), border=0)
+        pdf.ln(8)
+        
+    pdf.ln(20)
+    pdf.cell(90, 10, txt="GIAO VIEN BO MON", align='C')
+    pdf.cell(90, 10, txt="HOC SINH XAC NHAN", align='C')
+    pdf.ln(5)
+    pdf.set_font("Helvetica", 'I', 10)
+    pdf.cell(90, 10, txt="(Ky va ghi ro ho ten)", align='C')
+    pdf.cell(90, 10, txt="(Ky va ghi ro ho ten)", align='C')
+    
+    return pdf.output(dest='S').encode('latin-1')
+
+# --- HÀM HỖ TRỢ KHÁC (Giữ nguyên) ---
 def format_vietnam_time(utc_time_str):
     try:
         utc_dt = datetime.fromisoformat(utc_time_str.replace('Z', '+00:00'))
@@ -60,19 +95,19 @@ def parse_docx_simple(file):
         parts = re.split(r'(?i)\b([A-D]\s*[:.])', q_blocks[i+1])
         question_text = parts[0].replace("[[DUNG]]", "").replace("[[HET]]", "").strip()
         options_dict = {}
-        ans_key = ""
+        ans_k = ""
         for j in range(1, len(parts), 2):
             label = parts[j].strip().upper()[0]
             val = parts[j+1].replace('[[DUNG]]', '').replace('[[HET]]', '').strip()
             options_dict[label] = f"{label}. {val}"
-            if "[[DUNG]]" in parts[j+1]: ans_key = label
+            if "[[DUNG]]" in parts[j+1]: ans_k = label
         sorted_options = [options_dict[k] for k in sorted(options_dict.keys())]
-        if sorted_options: questions.append({"question": f"{header} {question_text}", "options": sorted_options, "answer_key": ans_key})
+        if sorted_options: questions.append({"question": f"{header} {question_text}", "options": sorted_options, "answer_key": ans_k})
     return questions
 
-# --- TIÊU ĐỀ ---
-st.markdown("<h1 class='no-print'>HỆ THỐNG THI TRỰC TUYẾN</h1>", unsafe_allow_html=True)
-st.markdown("<div class='sub-title no-print'>Trường THCS Lê Quý Đôn, phường Hà Giang 1, tỉnh Tuyên Quang</div>", unsafe_allow_html=True)
+# --- GIAO DIỆN ---
+st.markdown("<h1>HỆ THỐNG THI TRỰC TUYẾN</h1>", unsafe_allow_html=True)
+st.markdown("<div class='sub-title'>Trường THCS Lê Quý Đôn, phường Hà Giang 1, tỉnh Tuyên Quang</div>", unsafe_allow_html=True)
 
 tab_hs, tab_gv = st.tabs(["👨‍🎓 PHÒNG THI HỌC SINH", "👩‍🏫 QUẢN TRỊ VIÊN"])
 
@@ -127,12 +162,12 @@ with tab_hs:
                 
                 st.session_state["is_testing"] = False
                 if grade >= 8: st.balloons()
-                st.success(f"Nộp bài thành công! Điểm của em: {grade}"); time.sleep(2); st.rerun()
+                st.success(f"Nộp bài thành công! Điểm: {grade}"); time.sleep(2); st.rerun()
 
 with tab_gv:
     pwd = st.text_input("🔐 Mật khẩu quản lý:", type="password", key="gv_pwd")
     if pwd == ADMIN_PASSWORD:
-        col1, col2 = st.columns([1, 2])
+        col1, col2 = st.columns([1, 1.8])
         with col1:
             st.subheader("📤 QUẢN LÝ ĐỀ")
             n_ma = st.text_input("Mã đề:"); t_mon = st.text_input("Môn/Lớp:")
@@ -148,39 +183,26 @@ with tab_gv:
                 supabase.table("student_results").delete().neq("id", 0).execute(); st.rerun()
 
         with col2:
-            st.subheader("📊 KẾT QUẢ & IN PHIẾU")
+            st.subheader("📊 KẾT QUẢ & XUẤT PHIẾU")
             res_all = supabase.table("student_results").select("*").execute()
             if res_all.data:
                 df = pd.DataFrame(res_all.data).sort_values(by="ho_ten")
-                df['created_at'] = df['created_at'].apply(format_vietnam_time)
-                st.dataframe(df[["ho_ten", "lop", "so_cau_dung", "diem", "ma_de", "created_at"]], use_container_width=True)
+                st.dataframe(df[["ho_ten", "lop", "so_cau_dung", "diem", "ma_de"]], use_container_width=True)
                 
                 st.write("---")
-                sel_hs = st.selectbox("🖨️ Chọn học sinh in phiếu:", ["-- Chọn --"] + df['ho_ten'].tolist())
+                sel_hs = st.selectbox("🖨️ Chọn học sinh tải Phiếu minh chứng:", ["-- Chọn --"] + df['ho_ten'].tolist())
                 if sel_hs != "-- Chọn --":
                     hs = df[df['ho_ten'] == sel_hs].iloc[0]
-                    st.markdown(f"""
-                    <div class="print-area" style="background: white; padding: 40px; border: 2px solid #1e3a8a; color: black !important; font-family: 'Arial';">
-                        <h2 style="text-align: center; color: #1e3a8a; margin-bottom: 5px;">PHIẾU MINH CHỨNG KẾT QUẢ KIỂM TRA</h2>
-                        <p style="text-align: center; margin-top: 0;">Trường THCS Lê Quý Đôn - Tuyên Quang</p>
-                        <hr style="border: 1px solid #1e3a8a;">
-                        <br>
-                        <table style="width: 100%; color: black; border: none; font-size: 1.2em; line-height: 2em;">
-                            <tr><td width="40%"><b>Họ và tên học sinh:</b></td><td>{hs['ho_ten'].upper()}</td></tr>
-                            <tr><td><b>Lớp học:</b></td><td>{hs['lop']}</td></tr>
-                            <tr><td><b>Môn kiểm tra:</b></td><td>{hs['lop_thi']}</td></tr>
-                            <tr><td><b>Mã đề thi:</b></td><td>{hs['ma_de']}</td></tr>
-                            <tr><td><b>Ngày thi:</b></td><td>{hs['ngay_thi']}</td></tr>
-                            <tr><td><b>Thời gian nộp bài:</b></td><td>{hs['created_at']}</td></tr>
-                            <tr><td><b>Kết quả đạt được:</b></td><td><b style="font-size: 1.3em; color: #1e3a8a;">{hs['diem']} điểm ({hs['so_cau_dung']})</b></td></tr>
-                        </table>
-                        <br><br><br>
-                        <table style="width: 100%; text-align: center; color: black;">
-                            <tr>
-                                <td width="50%"><b>GIÁO VIÊN BỘ MÔN</b><br><br><br><br>(Ký và ghi rõ họ tên)</td>
-                                <td width="50%"><b>HỌC SINH XÁC NHẬN</b><br><br><br><br>(Ký và ghi rõ họ tên)</td>
-                            </tr>
-                        </table>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    st.info("💡 Nhấn Ctrl + P để in phiếu sạch sẽ này.")
+                    
+                    # Nút tải PDF trực tiếp
+                    try:
+                        pdf_data = create_pdf_report(hs['ho_ten'], hs['lop'], hs['lop_thi'], hs['ma_de'], hs['ngay_thi'], hs['diem'], hs['so_cau_dung'])
+                        st.download_button(
+                            label=f"📥 Tải Phiếu Minh Chứng ({hs['ho_ten']})",
+                            data=pdf_data,
+                            file_name=f"Phieu_Diem_{hs['ho_ten']}.pdf",
+                            mime="application/pdf"
+                        )
+                        st.success("Bấm nút trên để tải file PDF về máy và in nhé!")
+                    except Exception as e:
+                        st.error(f"Lỗi tạo PDF: {e}")
