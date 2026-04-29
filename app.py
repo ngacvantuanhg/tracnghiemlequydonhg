@@ -27,7 +27,7 @@ st.markdown(f"""
     </style>
     """, unsafe_allow_html=True)
 
-# --- BỘ MÁY QUÉT ĐỀ V61 ---
+# --- BỘ MÁY QUÉT ĐỀ CHUẨN ---
 def parse_docx_final(file):
     doc = Document(file)
     questions = []
@@ -65,14 +65,14 @@ def parse_docx_final(file):
 
 # --- TIÊU ĐỀ CHÍNH & PHỤ ---
 st.markdown("""
-    <h1 style='text-align:center; color:#1e3a8a; font-weight: bold; margin-bottom: 5px;'>HỆ THỐNG THI TRẮC NGHIỆM</h1>
+    <h1 style='text-align:center; color:#1e3a8a; font-weight: bold; margin-bottom: 5px;'>HỆ THỐNG THI LÊ QUÝ ĐÔN</h1>
     <h4 style='text-align:center; color:#475569; font-weight: normal; margin-top: 0px;'>Trường THCS Lê Quý Đôn, phường Hà Giang 1, tỉnh Tuyên Quang</h4>
     """, unsafe_allow_html=True)
 
 tab_hs, tab_gv = st.tabs(["👨‍🎓 PHÒNG THI HỌC SINH", "👩‍🏫 QUẢN TRỊ VIÊN"])
 
 with tab_hs:
-    res_exams = supabase.table("exam_questions").select("ten_mon, ma_de, giao_vien").execute()
+    res_exams = supabase.table("exam_questions").select("ten_mon, ma_de, giao_vien, ngay_thi").execute()
     all_exams_data = res_exams.data if res_exams.data else []
     subjects = sorted(list(set([str(i.get('ten_mon', '')).strip() for i in all_exams_data if str(i.get('ten_mon', '')).strip() != ''])))
 
@@ -98,8 +98,8 @@ with tab_hs:
                         st.session_state.update({
                             "quiz_data": inf["nội_dung_json"], "ma_de_dang_thi": sel_ma_de, 
                             "st_name": name, "st_class": actual_class, "is_testing": True, 
-                            "mon_hoc": inf.get('ten_mon'), "ngay_thi": inf.get('ngay_thi'),
-                            "giao_vien": inf.get('giao_vien', '') # Lấy tên giáo viên từ đề
+                            "mon_hoc": inf.get('ten_mon'), "ngay_thi": inf.get('ngay_thi', ''),
+                            "giao_vien": inf.get('giao_vien', '')
                         })
                         st.rerun()
             else: st.warning("Vui lòng điền đủ thông tin!")
@@ -123,7 +123,7 @@ with tab_hs:
                     "ma_de": st.session_state["ma_de_dang_thi"], "ho_ten": st.session_state["st_name"], 
                     "lop": st.session_state["st_class"], "diem": grade, "so_cau_dung": f"{c_num}/{len(st.session_state['quiz_data'])}",
                     "lop_thi": st.session_state["mon_hoc"], "ngay_thi": st.session_state["ngay_thi"],
-                    "giao_vien": st.session_state.get("giao_vien", "") # Lưu tên giáo viên vào bảng điểm
+                    "giao_vien": st.session_state.get("giao_vien", "")
                 }).execute()
                 st.session_state["is_testing"] = False
                 st.success(f"Nộp bài thành công! Điểm: {grade}")
@@ -142,7 +142,8 @@ with tab_gv:
             st.subheader("📤 QUẢN LÝ ĐỀ")
             n_ma = st.text_input("Mã đề:").strip()
             t_mon = st.text_input("Môn học:").strip()
-            t_gv = st.text_input("Giáo viên coi thi (Sẽ in lên phiếu):").strip().title() # Ô NHẬP TÊN GV
+            t_gv = st.text_input("Giáo viên coi thi (In lên phiếu):").strip().title()
+            d_thi = st.date_input("Ngày thi:") # ĐÃ BỔ SUNG NGÀY THI
             f_word = st.file_uploader("File Word:", type=["docx"])
             
             if st.button("🚀 CẬP NHẬT ĐỀ"):
@@ -150,8 +151,7 @@ with tab_gv:
                     d_js = parse_docx_final(f_word)
                     supabase.table("exam_questions").upsert({
                         "ma_de": n_ma, "nội_dung_json": d_js, "ten_mon": t_mon, 
-                        "giao_vien": t_gv, # Lưu tên giáo viên
-                        "ngay_thi": datetime.now().strftime("%d/%m/%Y")
+                        "giao_vien": t_gv, "ngay_thi": d_thi.strftime("%d/%m/%Y") # Lưu Ngày thi
                     }).execute()
                     st.success(f"Đã nạp đề {n_ma} thành công!")
                     ans_preview = [f"C{i+1}: {q.get('answer_key', 'LỖI')}" for i, q in enumerate(d_js)]
@@ -179,23 +179,24 @@ with tab_gv:
             res = supabase.table("student_results").select("*").execute()
             if res.data:
                 df = pd.DataFrame(res.data).sort_values(by="created_at", ascending=False)
-                st.dataframe(df[["ho_ten", "lop", "so_cau_dung", "diem", "ma_de"]], use_container_width=True)
+                # HIỂN THỊ THÊM NGÀY THI VÀO BẢNG
+                st.dataframe(df[["ho_ten", "lop", "so_cau_dung", "diem", "ma_de", "ngay_thi"]], use_container_width=True)
+                
                 s_hs = st.selectbox("🖨️ In phiếu cho:", ["-- Chọn --"] + sorted(df['ho_ten'].unique().tolist()))
                 if s_hs != "-- Chọn --":
                     h = df[df['ho_ten'] == s_hs].iloc[0]
-                    
-                    # Lấy tên giáo viên và học sinh để điền vào phần ký
                     ten_gv_in = str(h['giao_vien']).upper() if 'giao_vien' in h and h['giao_vien'] else ""
                     ten_hs_in = str(h['ho_ten']).upper()
+                    ngay_thi_in = str(h['ngay_thi']) if 'ngay_thi' in h and h['ngay_thi'] else ""
                     
-                    # CẤU TRÚC PHIẾU IN TRÊN WEB
+                    # PHIẾU IN TRÊN WEB (CÓ NGÀY THI)
                     st.markdown(f"""
                     <div style="background: white; padding: 25px; border: 2px solid #1e3a8a; color: black; border-radius: 10px;">
                         <h2 style="text-align:center;">PHIẾU XÁC NHẬN KẾT QUẢ</h2>
                         <hr>
                         <p><b>Thí sinh:</b> {h['ho_ten'].upper()} &nbsp;&nbsp; <b>Lớp:</b> {h['lop']}</p>
                         <p><b>Môn thi:</b> {h['lop_thi']} &nbsp;&nbsp; <b>Mã đề:</b> {h['ma_de']}</p>
-                        <p><b>Điểm số: <span style="color:red;">{h['diem']}</span></b> ({h['so_cau_dung']} câu đúng)</p>
+                        <p><b>Ngày thi:</b> {ngay_thi_in} &nbsp;&nbsp; <b>Điểm số: <span style="color:red;">{h['diem']}</span></b> ({h['so_cau_dung']} câu đúng)</p>
                         <br><br>
                         <table style="width:100%; text-align:center;">
                             <tr>
@@ -206,7 +207,7 @@ with tab_gv:
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    # CẤU TRÚC FILE HTML ĐỂ TẢI VỀ IN
+                    # FILE HTML TẢI VỀ IN (CÓ NGÀY THI)
                     print_html = f"""
                     <html>
                     <body onload='window.print()'>
@@ -219,6 +220,7 @@ with tab_gv:
                                 <tr><td><b>Lớp:</b></td><td>{h['lop']}</td></tr>
                                 <tr><td><b>Môn thi:</b></td><td>{h['lop_thi']}</td></tr>
                                 <tr><td><b>Mã đề:</b></td><td>{h['ma_de']}</td></tr>
+                                <tr><td><b>Ngày thi:</b></td><td>{ngay_thi_in}</td></tr>
                                 <tr><td><b>Điểm số:</b></td><td><b>{h['diem']}</b> ({h['so_cau_dung']} câu đúng)</td></tr>
                             </table>
                             <br><br><br>
