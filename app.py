@@ -266,60 +266,66 @@ with tab_hs:
     # ── TRẠNG THÁI 1: ĐĂNG KÝ ──────────────────────────────
     if not ss.get("is_testing") and not ss.get("show_result"):
 
-        st.subheader("📝 Đăng ký thông tin dự thi")
+        # Dùng container — khi st.rerun() toàn bộ block này không còn render
+        reg_container = st.container()
+        with reg_container:
+            st.subheader("📝 Đăng ký thông tin dự thi")
 
-        # Chọn môn NGOÀI form để filter mã đề kịp thời
-        sel_subject = st.selectbox(
-            "📚 Chọn Môn học:",
-            ["-- Chọn môn --"] + subjects,
-            key="sel_subject_outer"
-        )
-        filtered_codes = [
-            e["ma_de"] for e in all_exams
-            if str(e.get("ten_mon", "")).strip() == sel_subject
-        ]
-
-        with st.form("info_form"):
-            name        = st.text_input("👤 Họ và Tên của em:")
-            st_class    = st.text_input("🏫 Lớp của em:")
-            ma_de_opts  = (["-- Chọn mã đề --"] + filtered_codes) if filtered_codes else ["-- Chọn môn trước --"]
-            sel_ma_de   = st.selectbox("🔑 Chọn Mã đề thi:", ma_de_opts)
-            start_btn   = st.form_submit_button("🚀 BẮT ĐẦU LÀM BÀI", use_container_width=True)
-
-        if start_btn:
-            valid = (
-                name.strip() and st_class.strip()
-                and sel_subject != "-- Chọn môn --"
-                and sel_ma_de not in ("-- Chọn mã đề --", "-- Chọn môn trước --")
+            # Chọn môn NGOÀI form để filter mã đề kịp thời
+            # Xóa key cũ nếu còn sót từ lần trước để tránh ghost widget
+            sel_subject = st.selectbox(
+                "📚 Chọn Môn học:",
+                ["-- Chọn môn --"] + subjects,
+                key="sel_subject_outer"
             )
-            if not valid:
-                st.error("❌ Vui lòng điền đầy đủ thông tin trước khi bắt đầu!")
-            else:
-                ex = supabase.table("exam_questions").select("*").eq("ma_de", sel_ma_de).execute()
-                if ex.data:
-                    info = ex.data[0]
-                    # Kiểm tra đã nộp chưa trước khi vào thi
-                    if check_duplicate(name.strip(), sel_ma_de, info.get("ngay_thi", "")):
-                        st.error("⚠️ Bạn đã nộp bài cho đề thi này rồi. Không thể thi lại!")
-                    else:
-                        ss.update({
-                            "quiz_data":      info["nội_dung_json"],  # giữ nguyên thứ tự
-                            "ma_de_dang_thi": sel_ma_de,
-                            "st_name":        name.strip(),
-                            "st_class":       st_class.strip(),
-                            "is_testing":     True,
-                            "show_result":    False,
-                            "mon_hoc":        info.get("ten_mon", ""),
-                            "lop_kiem_tra":   info.get("ten_lop", ""),
-                            "ngay_thi":       info.get("ngay_thi", ""),
-                            "start_time":     time.time(),
-                            "total_seconds":  info.get("thoi_gian_phut", 15) * 60,
-                            "u_choices":      {},
-                            "auto_submitted": False,
-                        })
-                        st.rerun()
+            filtered_codes = [
+                e["ma_de"] for e in all_exams
+                if str(e.get("ten_mon", "")).strip() == sel_subject
+            ]
+
+            with st.form("info_form"):
+                name        = st.text_input("👤 Họ và Tên của em:")
+                st_class    = st.text_input("🏫 Lớp của em:")
+                ma_de_opts  = (["-- Chọn mã đề --"] + filtered_codes) if filtered_codes else ["-- Chọn môn trước --"]
+                sel_ma_de   = st.selectbox("🔑 Chọn Mã đề thi:", ma_de_opts)
+                start_btn   = st.form_submit_button("🚀 BẮT ĐẦU LÀM BÀI", use_container_width=True)
+
+            if start_btn:
+                valid = (
+                    name.strip() and st_class.strip()
+                    and sel_subject != "-- Chọn môn --"
+                    and sel_ma_de not in ("-- Chọn mã đề --", "-- Chọn môn trước --")
+                )
+                if not valid:
+                    st.error("❌ Vui lòng điền đầy đủ thông tin trước khi bắt đầu!")
                 else:
-                    st.error("❌ Không tìm thấy đề thi. Vui lòng thử lại.")
+                    ex = supabase.table("exam_questions").select("*").eq("ma_de", sel_ma_de).execute()
+                    if ex.data:
+                        info = ex.data[0]
+                        if check_duplicate(name.strip(), sel_ma_de, info.get("ngay_thi", "")):
+                            st.error("⚠️ Bạn đã nộp bài cho đề thi này rồi. Không thể thi lại!")
+                        else:
+                            # Xóa key selectbox môn để không bị ghost widget sau rerun
+                            ss.pop("sel_subject_outer", None)
+                            ss.update({
+                                "quiz_data":      info["nội_dung_json"],
+                                "ma_de_dang_thi": sel_ma_de,
+                                "st_name":        name.strip(),
+                                "st_class":       st_class.strip(),
+                                "is_testing":     True,
+                                "show_result":    False,
+                                "mon_hoc":        info.get("ten_mon", ""),
+                                "lop_kiem_tra":   info.get("ten_lop", ""),
+                                "ngay_thi":       info.get("ngay_thi", ""),
+                                "start_time":     time.time(),
+                                "total_seconds":  info.get("thoi_gian_phut", 15) * 60,
+                                "u_choices":      {},
+                                "auto_submitted": False,
+                            })
+                            st.rerun()
+                    else:
+                        st.error("❌ Không tìm thấy đề thi. Vui lòng thử lại.")
+        st.stop()  # Không render thêm bất cứ thứ gì khi đang ở trạng thái đăng ký
 
     # ── TRẠNG THÁI 2: ĐANG THI ──────────────────────────────
     elif ss.get("is_testing"):
@@ -390,6 +396,7 @@ with tab_hs:
         # Tự reload mỗi 5 giây để cập nhật đồng hồ
         time.sleep(5)
         st.rerun()
+        st.stop()  # Không render trạng thái khác
 
     # ── TRẠNG THÁI 3: KẾT QUẢ (chỉ xem, không thi lại) ────
     elif ss.get("show_result"):
