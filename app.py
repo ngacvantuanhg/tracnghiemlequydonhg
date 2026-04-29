@@ -23,12 +23,12 @@ bg_img = "https://raw.githubusercontent.com/ngacvantuanhg/tracnghiemlequydonhg/m
 st.markdown(f"""
     <style>
     .stApp {{ background-image: url("{bg_img}"); background-attachment: fixed; background-size: cover; background-position: center; }}
-    .main {{ background-color: rgba(255, 255, 255, 0.9); padding: 2rem; border-radius: 20px; }}
+    .main {{ background-color: rgba(255, 255, 255, 0.95); padding: 2rem; border-radius: 20px; }}
     </style>
     """, unsafe_allow_html=True)
 
-# --- BỘ MÁY QUÉT ĐỀ V59 (SIÊU THÔNG MINH - CHẤP MỌI LOẠI MÀU ĐỎ) ---
-def parse_docx_v59(file):
+# --- BỘ MÁY QUÉT ĐỀ (SIÊU THÔNG MINH - CHẤP MỌI MÀU) ---
+def parse_docx_final(file):
     doc = Document(file)
     questions = []
     full_text = ""
@@ -37,11 +37,8 @@ def parse_docx_v59(file):
         para_text = ""
         for run in para.runs:
             is_ans = False
-            # 1. Nhận diện mọi loại màu chữ khác màu đen
-            if run.font.color and run.font.color.rgb:
-                if str(run.font.color.rgb) != "000000": 
-                    is_ans = True
-            # 2. Nhận diện cả bút Highlight (Dạ quang)
+            if run.font.color and run.font.color.rgb and str(run.font.color.rgb) != "000000": 
+                is_ans = True
             elif run.font.highlight_color and str(run.font.highlight_color) != "NONE":
                 is_ans = True
                 
@@ -57,7 +54,6 @@ def parse_docx_v59(file):
         header = q_blocks[i].strip()
         content = q_blocks[i+1]
         
-        # Đẩy thẻ DUNG ra sau để cắt không bị đứt
         content = re.sub(r'\[\[DUNG\]\](\s*[A-D]\s*[:.])', r'\1[[DUNG]]', content, flags=re.IGNORECASE)
         parts = re.split(r'(?i)\b([A-D]\s*[:.])', content)
         
@@ -80,13 +76,14 @@ def parse_docx_v59(file):
     return questions
 
 # --- TIÊU ĐỀ ---
-st.markdown("<h1 style='text-align:center; color:#1e3a8a;'>HỆ THỐNG THI LÊ QUÝ ĐÔN</h1>", unsafe_allow_html=True)
-tab_hs, tab_gv = st.tabs(["👨‍🎓 PHÒNG THI", "👩‍🏫 QUẢN TRỊ"])
+st.markdown("<h1 style='text-align:center; color:#1e3a8a; font-weight: bold;'>HỆ THỐNG THI LÊ QUÝ ĐÔN</h1>", unsafe_allow_html=True)
+tab_hs, tab_gv = st.tabs(["👨‍🎓 PHÒNG THI HỌC SINH", "👩‍🏫 QUẢN TRỊ VIÊN"])
 
 with tab_hs:
     res_exams = supabase.table("exam_questions").select("ten_mon, ma_de").execute()
     all_exams_data = res_exams.data if res_exams.data else []
-    subjects = sorted(list(set([str(i.get('ten_mon', '')).strip() for i in all_exams_data if i.get('ten_mon')])))
+    # Loại bỏ các môn học trống
+    subjects = sorted(list(set([str(i.get('ten_mon', '')).strip() for i in all_exams_data if str(i.get('ten_mon', '')).strip() != ''])))
 
     if not st.session_state.get("is_testing", False):
         st.subheader("📝 Đăng ký dự thi")
@@ -95,7 +92,9 @@ with tab_hs:
         with c2: actual_class = st.text_input("🏫 Lớp:").strip().upper()
         
         sel_subject = st.selectbox("📚 Chọn môn học:", options=["-- Chọn môn --"] + subjects)
-        filtered_codes = [i['ma_de'] for i in all_exams_data if str(i.get('ten_mon', '')).strip() == sel_subject]
+        
+        # LỌC SẠCH "BÓNG MA": Chỉ lấy những mã đề có nội dung thực sự
+        filtered_codes = [i['ma_de'] for i in all_exams_data if str(i.get('ten_mon', '')).strip() == sel_subject and str(i.get('ma_de', '')).strip() != '']
         sel_ma_de = st.selectbox("🔑 Chọn mã đề:", options=["-- Chọn mã đề --"] + filtered_codes)
         
         if st.button("🚀 BẮT ĐẦU LÀM BÀI"):
@@ -150,28 +149,29 @@ with tab_gv:
         c1, c2 = st.columns([1.2, 2])
         with c1:
             st.subheader("📤 QUẢN LÝ ĐỀ")
-            n_ma = st.text_input("Mã đề:"); t_mon = st.text_input("Môn:"); f_word = st.file_uploader("File Word:", type=["docx"])
+            n_ma = st.text_input("Mã đề:").strip()
+            t_mon = st.text_input("Môn:").strip()
+            f_word = st.file_uploader("File Word:", type=["docx"])
+            
             if st.button("🚀 CẬP NHẬT ĐỀ"):
                 if n_ma and t_mon and f_word:
-                    d_js = parse_docx_v59(f_word)
+                    d_js = parse_docx_final(f_word)
                     supabase.table("exam_questions").upsert({"ma_de": n_ma, "nội_dung_json": d_js, "ten_mon": t_mon, "ngay_thi": datetime.now().strftime("%d/%m/%Y")}).execute()
-                    st.success("Đã nạp đề thành công!")
+                    st.success(f"Đã nạp đề {n_ma} thành công!")
                     
-                    # BÁO CÁO ĐÁP ÁN ĐỂ CÔ GIÁO KIỂM TRA
                     ans_preview = [f"C{i+1}: {q.get('answer_key', 'LỖI')}" for i, q in enumerate(d_js)]
                     st.info(f"🔍 **Máy tính đã nhận diện đáp án:**\n\n" + " | ".join(ans_preview))
-                    st.caption("*(Nếu câu nào hiện LỖI hoặc sai đáp án, vui lòng bôi màu lại đáp án câu đó trong file Word rồi cập nhật lại)*")
+                else:
+                    st.error("Cần nhập đủ Mã đề và Môn học!")
                     
             st.divider()
-            
-            # --- CƠ CHẾ XÓA DỮ LIỆU AN TOÀN ---
             if st.button("❌ XÓA TẤT CẢ ĐỀ THI"):
                 try:
                     supabase.table("exam_questions").delete().neq("ma_de", "DUMMY").execute()
                     st.success("Đã xóa sạch đề thi!")
                     time.sleep(1); st.rerun()
                 except Exception as e:
-                    st.error("⚠️ Supabase đang chặn lệnh xóa tự động. Bạn hãy vào trang web Supabase -> Table Editor -> Bảng `exam_questions` -> Bôi đen các dòng và xóa thủ công nhé!")
+                    st.warning("Vui lòng vào trang Supabase -> Table Editor -> exam_questions để xóa thủ công.")
                     
             if st.button("🧹 XÓA TẤT CẢ KẾT QUẢ THI"):
                 try:
@@ -179,7 +179,7 @@ with tab_gv:
                     st.success("Đã xóa sạch bảng điểm!")
                     time.sleep(1); st.rerun()
                 except Exception as e:
-                    st.error("⚠️ Lỗi bảo mật. Hãy vào Supabase -> Table Editor -> Bảng `student_results` để xóa thủ công.")
+                    st.warning("Vui lòng vào trang Supabase -> Table Editor -> student_results để xóa thủ công.")
 
         with c2:
             st.subheader("📊 BẢNG ĐIỂM")
