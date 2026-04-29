@@ -65,7 +65,7 @@ def parse_docx_final(file):
 
 # --- TIÊU ĐỀ CHÍNH & PHỤ ---
 st.markdown("""
-    <h1 style='text-align:center; color:#1e3a8a; font-weight: bold; margin-bottom: 5px;'>HỆ THỐNG THI LÊ QUÝ ĐÔN</h1>
+    <h1 style='text-align:center; color:#1e3a8a; font-weight: bold; margin-bottom: 5px;'>HỆ THỐNG THI TRẮC NGHIỆM</h1>
     <h4 style='text-align:center; color:#475569; font-weight: normal; margin-top: 0px;'>Trường THCS Lê Quý Đôn, phường Hà Giang 1, tỉnh Tuyên Quang</h4>
     """, unsafe_allow_html=True)
 
@@ -212,7 +212,7 @@ with tab_gv:
                     <html>
                     <body onload='window.print()'>
                         <div style='border:2px solid black; padding:40px; font-family:Arial;'>
-                            <h2 style='text-align:center;'>PHIẾU XÁC NHẬN KẾT QUẢ</h2>
+                            <h2 style='text-align:center;'>PHIẾU XÁC NHẬN KẾT QUẢ THI TRẮC NGHIỆM</h2>
                             <p style='text-align:center;'>Trường THCS Lê Quý Đôn, phường Hà Giang 1, tỉnh Tuyên Quang</p>
                             <hr>
                             <table style='width:100%; line-height:2.5em; font-size: 1.1em;'>
