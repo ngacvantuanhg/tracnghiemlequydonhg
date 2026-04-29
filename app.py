@@ -252,21 +252,30 @@ with tab_hs:
     # ---------- TRẠNG THÁI: ĐĂNG KÝ ----------
     if not state.get("is_testing") and not state.get("show_result"):
 
+        st.subheader("📝 Đăng ký thông tin dự thi")
+
+        # ── Chọn môn NGOÀI form để Streamlit cập nhật ngay lập tức ──
+        sel_subject = st.selectbox(
+            "📚 Chọn Môn học:",
+            options=["-- Chọn môn --"] + subjects,
+            key="sel_subject_outer"
+        )
+        filtered_codes = [
+            item['ma_de'] for item in all_exams
+            if str(item.get('ten_mon', '')).strip() == sel_subject
+        ]
+
         with st.form("info_form"):
-            st.subheader("📝 Đăng ký thông tin dự thi")
             name = st.text_input("👤 Họ và Tên của em:")
             actual_class = st.text_input("🏫 Lớp của em:")
-            sel_subject = st.selectbox("📚 Chọn Môn học:", options=["-- Chọn môn --"] + subjects)
-            filtered_codes = [
-                item['ma_de'] for item in all_exams
-                if str(item.get('ten_mon', '')).strip() == sel_subject
-            ]
-            sel_ma_de = st.selectbox("🔑 Chọn Mã đề thi:", options=["-- Chọn mã đề --"] + filtered_codes)
-
+            sel_ma_de = st.selectbox(
+                "🔑 Chọn Mã đề thi:",
+                options=(["-- Chọn mã đề --"] + filtered_codes) if filtered_codes else ["-- Chọn môn trước --"]
+            )
             submitted = st.form_submit_button("🚀 BẮT ĐẦU LÀM BÀI", use_container_width=True)
 
         if submitted:
-            if name.strip() and actual_class.strip() and sel_subject != "-- Chọn môn --" and sel_ma_de != "-- Chọn mã đề --":
+            if name.strip() and actual_class.strip() and sel_subject != "-- Chọn môn --" and sel_ma_de not in ("-- Chọn mã đề --", "-- Chọn môn trước --"):
                 ex_res = supabase.table("exam_questions").select("*").eq("ma_de", sel_ma_de).execute()
                 if ex_res.data:
                     ex_info = ex_res.data[0]
