@@ -27,8 +27,8 @@ st.markdown(f"""
     </style>
     """, unsafe_allow_html=True)
 
-# --- BỘ MÁY QUÉT ĐỀ THI CHUẨN XÁC V5 ---
-def parse_docx_v57(file):
+# --- BỘ MÁY QUÉT ĐỀ V58 (SIÊU THÔNG MINH & CHẶT CHẼ) ---
+def parse_docx_v58(file):
     doc = Document(file)
     questions = []
     full_text_with_marks = ""
@@ -47,6 +47,12 @@ def parse_docx_v57(file):
     for i in range(1, len(q_blocks), 2):
         header = q_blocks[i].strip()
         content = q_blocks[i+1]
+        
+        # --- THUẬT TOÁN "LÙA THẺ" (Sửa triệt để lỗi mất đáp án) ---
+        # Nếu thẻ [[DUNG]] nằm trước chữ A, B, C, D, ta đẩy nó ra phía sau để không bị cắt đứt
+        content = re.sub(r'\[\[DUNG\]\](\s*[A-D]\s*[:.])', r'\1[[DUNG]]', content, flags=re.IGNORECASE)
+        content = re.sub(r'\[\[HET\]\](\s*[A-D]\s*[:.])', r'\1[[HET]]', content, flags=re.IGNORECASE)
+        
         parts = re.split(r'(?i)\b([A-D]\s*[:.])', content)
         
         question_text = parts[0].replace("[[DUNG]]", "").replace("[[HET]]", "").strip()
@@ -54,9 +60,10 @@ def parse_docx_v57(file):
         final_answer = ""
         
         for j in range(1, len(parts), 2):
-            label = parts[j].strip().upper()[0]
-            text = parts[j+1].strip()
+            label = parts[j].strip().upper()[0] # Nhặt ra chữ A, B, C, hoặc D
+            text = parts[j+1]
             
+            # Kiểm tra xem đáp án có thẻ [[DUNG]] không
             if "[[DUNG]]" in text or "[[DUNG]]" in parts[j]:
                 final_answer = label
                 
@@ -64,6 +71,7 @@ def parse_docx_v57(file):
             if clean_text:
                 options_dict[label] = f"{label}. {clean_text}"
         
+        # Tự động sắp xếp A, B, C, D không bao giờ nhảy lộn xộn
         sorted_options = [options_dict[k] for k in sorted(options_dict.keys())]
         
         if sorted_options:
@@ -74,7 +82,7 @@ def parse_docx_v57(file):
             })
     return questions
 
-# --- TIÊU ĐỀ ---
+# --- TIÊU ĐỀ CHÍNH ---
 st.markdown("<h1 style='text-align:center; color:#1e3a8a;'>HỆ THỐNG THI LÊ QUÝ ĐÔN</h1>", unsafe_allow_html=True)
 tab_hs, tab_gv = st.tabs(["👨‍🎓 PHÒNG THI", "👩‍🏫 QUẢN TRỊ"])
 
@@ -87,7 +95,7 @@ with tab_hs:
         st.subheader("📝 Đăng ký dự thi")
         c1, c2 = st.columns(2)
         with c1: name = st.text_input("👤 Họ và tên:").strip().title()
-        with c2: actual_class = st.text_input("🏫 Lớp:").strip().upper()
+        with c2: actual_class = st.text_input("🏫 Lớp (Ví dụ 9A1):").strip().upper()
         
         sel_subject = st.selectbox("📚 Chọn môn học:", options=["-- Chọn môn --"] + subjects)
         filtered_codes = [i['ma_de'] for i in all_exams_data if str(i.get('ten_mon', '')).strip() == sel_subject]
@@ -95,9 +103,10 @@ with tab_hs:
         
         if st.button("🚀 BẮT ĐẦU LÀM BÀI"):
             if name and actual_class and sel_ma_de != "-- Chọn mã đề --":
+                # Chặn thi lại an toàn tuyệt đối
                 check = supabase.table("student_results").select("id").eq("ho_ten", name).eq("lop", actual_class).eq("ma_de", sel_ma_de).execute()
                 if len(check.data) > 0:
-                    st.error(f"⚠️ Em {name} (Lớp {actual_class}) đã nộp bài mã đề {sel_ma_de} rồi. Hệ thống không cho phép thi lại!")
+                    st.error(f"⚠️ Em {name} (Lớp {actual_class}) đã hoàn thành mã đề {sel_ma_de} rồi. Hệ thống không cho phép thi lại!")
                 else:
                     ex_res = supabase.table("exam_questions").select("*").eq("ma_de", sel_ma_de).execute()
                     if ex_res.data:
@@ -120,8 +129,10 @@ with tab_hs:
             if st.form_submit_button("📤 NỘP BÀI"):
                 c_num = 0
                 for i, q in enumerate(st.session_state["quiz_data"]):
-                    correct_key = q.get('answer_key', "").strip()
-                    user_ans = str(u_choices[i]) if u_choices[i] else ""
+                    correct_key = str(q.get('answer_key', "")).strip().upper()
+                    user_ans = str(u_choices[i]).strip().upper() if u_choices[i] else ""
+                    
+                    # Chấm điểm đối chiếu: "A" có khớp với đáp án người dùng "A. ..." hay không
                     if correct_key and user_ans.startswith(correct_key):
                         c_num += 1
                 
@@ -132,7 +143,7 @@ with tab_hs:
                     "lop_thi": st.session_state["mon_hoc"], "ngay_thi": st.session_state["ngay_thi"]
                 }).execute()
                 st.session_state["is_testing"] = False
-                st.success(f"Nộp bài thành công! {c_num} câu đúng. Điểm: {grade}")
+                st.success(f"Nộp bài thành công! Em làm đúng {c_num} câu. Điểm: {grade}")
                 time.sleep(2); st.rerun()
 
 with tab_gv:
@@ -149,13 +160,12 @@ with tab_gv:
             n_ma = st.text_input("Mã đề:"); t_mon = st.text_input("Môn:"); f_word = st.file_uploader("File Word:", type=["docx"])
             if st.button("🚀 CẬP NHẬT ĐỀ"):
                 if n_ma and t_mon and f_word:
-                    d_js = parse_docx_v57(f_word)
+                    d_js = parse_docx_v58(f_word)
                     supabase.table("exam_questions").upsert({"ma_de": n_ma, "nội_dung_json": d_js, "ten_mon": t_mon, "ngay_thi": datetime.now().strftime("%d/%m/%Y")}).execute()
                     st.success("Đã nạp đề!")
                     time.sleep(1); st.rerun()
             st.divider()
             
-            # --- CƠ CHẾ XÓA DỮ LIỆU AN TOÀN TUYỆT ĐỐI ---
             if st.button("❌ XÓA TẤT CẢ ĐỀ"):
                 all_exams = supabase.table("exam_questions").select("ma_de").execute()
                 if all_exams.data:
