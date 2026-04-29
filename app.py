@@ -27,8 +27,8 @@ st.markdown(f"""
     </style>
     """, unsafe_allow_html=True)
 
-# --- BỘ MÁY QUÉT ĐỀ THI CHUẨN XÁC TỪ V5 (Tích hợp) ---
-def parse_docx_v56(file):
+# --- BỘ MÁY QUÉT ĐỀ THI CHUẨN XÁC V5 ---
+def parse_docx_v57(file):
     doc = Document(file)
     questions = []
     full_text_with_marks = ""
@@ -50,14 +50,13 @@ def parse_docx_v56(file):
         parts = re.split(r'(?i)\b([A-D]\s*[:.])', content)
         
         question_text = parts[0].replace("[[DUNG]]", "").replace("[[HET]]", "").strip()
-        options_dict = {} # Dùng dict để tự sắp xếp A, B, C, D
+        options_dict = {}
         final_answer = ""
         
         for j in range(1, len(parts), 2):
             label = parts[j].strip().upper()[0]
             text = parts[j+1].strip()
             
-            # Ghi nhận đáp án nếu màu đỏ nằm ở nội dung hoặc ngay trên chữ cái A/B/C/D
             if "[[DUNG]]" in text or "[[DUNG]]" in parts[j]:
                 final_answer = label
                 
@@ -65,7 +64,6 @@ def parse_docx_v56(file):
             if clean_text:
                 options_dict[label] = f"{label}. {clean_text}"
         
-        # Sắp xếp lại list options theo thứ tự A, B, C, D cực chuẩn
         sorted_options = [options_dict[k] for k in sorted(options_dict.keys())]
         
         if sorted_options:
@@ -97,11 +95,9 @@ with tab_hs:
         
         if st.button("🚀 BẮT ĐẦU LÀM BÀI"):
             if name and actual_class and sel_ma_de != "-- Chọn mã đề --":
-                
-                # --- KIỂM TRA CHỐNG THI TRÙNG TUYỆT ĐỐI ---
                 check = supabase.table("student_results").select("id").eq("ho_ten", name).eq("lop", actual_class).eq("ma_de", sel_ma_de).execute()
                 if len(check.data) > 0:
-                    st.error(f"⚠️ Em {name} (Lớp {actual_class}) đã hoàn thành mã đề {sel_ma_de} rồi. Hệ thống không cho phép thi lại!")
+                    st.error(f"⚠️ Em {name} (Lớp {actual_class}) đã nộp bài mã đề {sel_ma_de} rồi. Hệ thống không cho phép thi lại!")
                 else:
                     ex_res = supabase.table("exam_questions").select("*").eq("ma_de", sel_ma_de).execute()
                     if ex_res.data:
@@ -126,7 +122,6 @@ with tab_hs:
                 for i, q in enumerate(st.session_state["quiz_data"]):
                     correct_key = q.get('answer_key', "").strip()
                     user_ans = str(u_choices[i]) if u_choices[i] else ""
-                    # Chấm điểm cực chuẩn từ bản V5
                     if correct_key and user_ans.startswith(correct_key):
                         c_num += 1
                 
@@ -154,15 +149,29 @@ with tab_gv:
             n_ma = st.text_input("Mã đề:"); t_mon = st.text_input("Môn:"); f_word = st.file_uploader("File Word:", type=["docx"])
             if st.button("🚀 CẬP NHẬT ĐỀ"):
                 if n_ma and t_mon and f_word:
-                    d_js = parse_docx_v56(f_word)
+                    d_js = parse_docx_v57(f_word)
                     supabase.table("exam_questions").upsert({"ma_de": n_ma, "nội_dung_json": d_js, "ten_mon": t_mon, "ngay_thi": datetime.now().strftime("%d/%m/%Y")}).execute()
                     st.success("Đã nạp đề!")
                     time.sleep(1); st.rerun()
             st.divider()
+            
+            # --- CƠ CHẾ XÓA DỮ LIỆU AN TOÀN TUYỆT ĐỐI ---
             if st.button("❌ XÓA TẤT CẢ ĐỀ"):
-                supabase.table("exam_questions").delete().neq("ma_de", "---").execute(); st.rerun()
+                all_exams = supabase.table("exam_questions").select("ma_de").execute()
+                if all_exams.data:
+                    for ex in all_exams.data:
+                        supabase.table("exam_questions").delete().eq("ma_de", ex["ma_de"]).execute()
+                st.success("Đã xóa sạch đề thi an toàn!")
+                time.sleep(1); st.rerun()
+                
             if st.button("🧹 XÓA TẤT CẢ KẾT QUẢ"):
-                supabase.table("student_results").delete().neq("id", 0).execute(); st.rerun()
+                all_res = supabase.table("student_results").select("*").execute()
+                if all_res.data:
+                    for r in all_res.data:
+                        if 'id' in r:
+                            supabase.table("student_results").delete().eq("id", r["id"]).execute()
+                st.success("Đã xóa sạch bảng điểm an toàn!")
+                time.sleep(1); st.rerun()
 
         with c2:
             st.subheader("📊 BẢNG ĐIỂM")
