@@ -109,61 +109,77 @@ def format_vietnam_time(utc_str: str) -> str:
         return utc_str
 
 
+_RED_COLORS = {"FF0000", "EE0000", "CC0000", "DC143C"}
+
+def _is_red(run) -> bool:
+    """Kiểm tra run có màu đỏ (đáp án đúng) không."""
+    try:
+        return (run.font.color
+                and run.font.color.type
+                and str(run.font.color.rgb).upper() in _RED_COLORS)
+    except Exception:
+        return False
+
+
 def parse_docx(file) -> list[dict]:
     """
     Đọc file Word, trả về danh sách câu hỏi.
-    Đáp án đúng được đánh dấu bằng màu chữ đỏ (FF0000).
+    Đáp án đúng = run có màu đỏ (FF0000 / EE0000 / ...).
+    Hỗ trợ 2 bố cục:
+      - Mỗi đáp án 1 dòng riêng
+      - 2 đáp án trên cùng 1 dòng cách nhau bằng tab / nhiều dấu cách
     Giữ nguyên thứ tự câu hỏi và đáp án từ file gốc.
     """
-    doc = Document(file)
-    full_text = ""
+    doc   = Document(file)
+    questions: list[dict] = []
+    q_text   = None
+    options: dict[str, str] = {}
+    ans_key  = ""
+
+    OPT_RE = re.compile(r'(?:^|\t|\s{2,})([A-D])\.\s*(.+?)(?=\t|\s{2,}[A-D]\.|$)')
+
+    def flush():
+        nonlocal q_text, options, ans_key
+        if q_text and len(options) >= 2 and ans_key:
+            questions.append({
+                "question":   q_text,
+                "options":    [f"{k}. {v}" for k, v in sorted(options.items())],
+                "answer_key": ans_key,
+            })
+        q_text  = None
+        options = {}
+        ans_key = ""
 
     for para in doc.paragraphs:
-        para_text = ""
-        for run in para.runs:
-            try:
-                is_red = run.font.color and str(run.font.color.rgb) == "FF0000"
-            except Exception:
-                is_red = False
-            para_text += f"[[DUNG]]{run.text}[[HET]]" if is_red else run.text
-        full_text += para_text + "\n"
+        text = para.text.strip()
+        if not text:
+            continue
 
-    questions = []
-    blocks = re.split(r'(?i)(Câu\s+\d+\s*[:.)])', full_text)
+        # Dòng câu hỏi: "Câu N:" / "Câu N." / "Câu N)"
+        if re.match(r'(?i)^Câu\s+\d+\s*[:.)])', text):
+            flush()
+            q_text = text
+            continue
 
-    for i in range(1, len(blocks), 2):
-        header = blocks[i].strip()
-        body   = blocks[i + 1]
+        # Dòng đáp án
+        matches = list(OPT_RE.finditer(text))
+        if matches and q_text:
+            red_texts = {
+                run.text.strip()
+                for run in para.runs
+                if _is_red(run) and run.text.strip()
+            }
+            for m in matches:
+                label   = m.group(1).upper()
+                content = re.sub(r'\s+$', '', m.group(2).strip())
+                options[label] = content
+                for rt in red_texts:
+                    if rt.startswith(f"{label}.") or content in rt:
+                        ans_key = label
+                        break
 
-        # Tách các lựa chọn A/B/C/D
-        parts = re.split(r'(?i)(?<!\w)([A-D]\s*[.:])\s*', body)
-        raw_question = parts[0].replace("[[DUNG]]", "").replace("[[HET]]", "").strip()
-
-        options   = {}
-        ans_key   = ""
-
-        for j in range(1, len(parts) - 1, 2):
-            label   = re.sub(r'[.:\s]', '', parts[j]).upper()          # "A", "B", "C", "D"
-            content_raw = parts[j + 1]
-            is_correct  = "[[DUNG]]" in content_raw
-            content     = content_raw.replace("[[DUNG]]", "").replace("[[HET]]", "").strip()
-            # Loại bỏ ký tự xuống dòng thừa ở cuối nội dung mỗi lựa chọn
-            content     = re.sub(r'\s+$', '', content)
-            options[label] = f"{label}. {content}"
-            if is_correct:
-                ans_key = label
-
-        # Chỉ lấy câu hỏi hợp lệ (có ít nhất 2 lựa chọn và có đáp án)
-        sorted_opts = [options[k] for k in sorted(options.keys()) if k in options]
-        if len(sorted_opts) >= 2 and ans_key:
-            questions.append({
-                "question":   f"{header} {raw_question}",
-                "options":    sorted_opts,
-                "answer_key": ans_key,          # ví dụ: "B"
-            })
-
+    flush()
     return questions
-
 
 def calc_score(quiz: list[dict], choices: dict) -> tuple[int, float]:
     """
