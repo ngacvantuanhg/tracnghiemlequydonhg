@@ -29,15 +29,15 @@ st.markdown(f"""
     </style>
     """, unsafe_allow_html=True)
 
-# --- HÀM HỖ TRỢ ---
-def parse_docx_v50(file):
+# --- HÀM PARSER V51 (SIÊU CHUẨN) ---
+def parse_docx_v51(file):
     doc = Document(file)
     questions = []
     full_text_with_marks = ""
     for para in doc.paragraphs:
         para_text = ""
         for run in para.runs:
-            # Kiểm tra màu đỏ FF0000
+            # Nhận diện chính xác màu đỏ FF0000
             if run.font.color and run.font.color.rgb and str(run.font.color.rgb) == "FF0000":
                 para_text += f"[[DUNG]]{run.text}[[HET]]"
             else:
@@ -53,10 +53,10 @@ def parse_docx_v50(file):
         options = []
         ans_key = ""
         for j in range(1, len(parts), 2):
-            label = parts[j].strip().upper()[0] # Lấy A, B, C hoặc D
+            label = parts[j].strip().upper()[0] # A, B, C, D
             content = parts[j+1]
             if "[[DUNG]]" in content:
-                ans_key = label # Lưu đúng ký tự A/B/C/D
+                ans_key = label # Ghi lại ký tự đáp án đúng
             clean_val = content.replace("[[DUNG]]", "").replace("[[HET]]", "").strip()
             options.append(f"{label}. {clean_val}")
         
@@ -92,7 +92,7 @@ with tab_hs:
                         "mon_hoc": inf.get('ten_mon'), "ngay_thi": inf.get('ngay_thi')
                     })
                     st.rerun()
-            else: st.error("Điền đủ thông tin em nhé!")
+            else: st.error("Thiếu thông tin em nhé!")
     else:
         with st.form("quiz_form"):
             st.info(f"Thí sinh: {st.session_state['st_name']} | Môn: {st.session_state['mon_hoc']}")
@@ -104,8 +104,12 @@ with tab_hs:
             if st.form_submit_button("📤 NỘP BÀI THI"):
                 c_num = 0
                 for i, q in enumerate(st.session_state["quiz_data"]):
-                    # So sánh ký tự đầu của đáp án đã chọn với answer_key
-                    if u_choices[i] and u_choices[i].strip().startswith(q['answer_key']):
+                    # LOGIC CHẤM ĐIỂM CHẶT CHẼ V51
+                    correct_key = q.get('answer_key', "").strip()
+                    user_ans = u_choices[i] if u_choices[i] else ""
+                    
+                    # Chỉ tính điểm nếu correct_key KHÔNG rỗng và user_ans bắt đầu bằng correct_key
+                    if correct_key and user_ans.strip().startswith(correct_key):
                         c_num += 1
                 
                 grade = round((c_num / len(st.session_state["quiz_data"])) * 10, 2)
@@ -116,12 +120,10 @@ with tab_hs:
                 }).execute()
                 st.session_state["is_testing"] = False
                 st.success(f"Nộp bài thành công! Số câu đúng: {c_num}/{len(st.session_state['quiz_data'])} - Điểm: {grade}")
-                time.sleep(3); st.rerun()
+                time.sleep(2); st.rerun()
 
 with tab_gv:
-    # KIỂM TRA ĐĂNG NHẬP
-    if "admin_logged_in" not in st.session_state:
-        st.session_state["admin_logged_in"] = False
+    if "admin_logged_in" not in st.session_state: st.session_state["admin_logged_in"] = False
 
     if not st.session_state["admin_logged_in"]:
         st.subheader("🔐 Đăng nhập Quản trị viên")
@@ -130,30 +132,24 @@ with tab_gv:
             if pwd_input == ADMIN_PASSWORD:
                 st.session_state["admin_logged_in"] = True
                 st.rerun()
-            else:
-                st.error("Mật khẩu không đúng!")
+            else: st.error("Mật khẩu không đúng!")
     else:
-        # Giao diện khi đã đăng nhập thành công
         col_header, col_logout = st.columns([5, 1])
-        with col_header:
-            st.success("✅ Đã đăng nhập quyền Quản trị")
+        with col_header: st.success("✅ Đã đăng nhập quyền Quản trị")
         with col_logout:
             if st.button("🚪 Thoát"):
                 st.session_state["admin_logged_in"] = False
                 st.rerun()
 
-        c1, c2 = st.columns([1, 2])
+        c1, c2 = st.columns([1, 2.2])
         with c1:
             st.subheader("📤 ĐĂNG ĐỀ")
             n_ma = st.text_input("Mã đề:"); t_mon = st.text_input("Môn:"); f_word = st.file_uploader("File Word:", type=["docx"])
             if st.button("🚀 Kích hoạt đề"):
                 if n_ma and t_mon and f_word:
-                    d_js = parse_docx_v50(f_word)
-                    supabase.table("exam_questions").upsert({
-                        "ma_de": n_ma, "nội_dung_json": d_js, 
-                        "ten_mon": t_mon, "ngay_thi": datetime.now().strftime("%d/%m/%Y")
-                    }).execute()
-                    st.success("Đã đăng đề thành công!"); time.sleep(1); st.rerun()
+                    d_js = parse_docx_v51(f_word)
+                    supabase.table("exam_questions").upsert({"ma_de": n_ma, "nội_dung_json": d_js, "ten_mon": t_mon, "ngay_thi": datetime.now().strftime("%d/%m/%Y")}).execute()
+                    st.success("Đã đăng đề!"); time.sleep(1); st.rerun()
             st.divider()
             if st.button("🔥 XÓA TẤT CẢ KẾT QUẢ"):
                 supabase.table("student_results").delete().neq("id", 0).execute(); st.rerun()
@@ -162,26 +158,29 @@ with tab_gv:
             st.subheader("📊 KẾT QUẢ & IN PHIẾU")
             res = supabase.table("student_results").select("*").execute()
             if res.data:
-                df = pd.DataFrame(res.data)
+                df = pd.DataFrame(res.data).sort_values(by="created_at", ascending=False)
                 st.dataframe(df[["ho_ten", "lop", "so_cau_dung", "diem", "ma_de"]], use_container_width=True)
                 s_hs = st.selectbox("🖨️ Chọn học sinh in phiếu:", ["-- Chọn --"] + sorted(df['ho_ten'].tolist()))
                 if s_hs != "-- Chọn --":
                     h = df[df['ho_ten'] == s_hs].iloc[0]
                     st.markdown(f"""
                     <div class="printable-card">
-                        <h2 style="text-align:center;">PHIẾU MINH CHỨNG KẾT QUẢ</h2>
+                        <h2 style="text-align:center; color:#1e3a8a;">PHIẾU MINH CHỨNG KẾT QUẢ</h2>
                         <hr>
-                        <p><b>Học sinh:</b> {h['ho_ten'].upper()} &nbsp;&nbsp;&nbsp; <b>Lớp:</b> {h['lop']}</p>
-                        <p><b>Môn thi:</b> {h['lop_thi']} &nbsp;&nbsp;&nbsp; <b>Mã đề:</b> {h['ma_de']}</p>
-                        <p><b>Kết quả: {h['diem']} điểm ({h['so_cau_dung']})</b></p>
-                        <br>
+                        <table style="width:100%; font-size:1.1em; line-height:2em;">
+                            <tr><td><b>Học sinh:</b></td><td>{h['ho_ten'].upper()}</td></tr>
+                            <tr><td><b>Lớp:</b></td><td>{h['lop']}</td></tr>
+                            <tr><td><b>Môn thi:</b></td><td>{h['lop_thi']}</td></tr>
+                            <tr><td><b>Kết quả:</b></td><td><b style="color:red;">{h['diem']} điểm ({h['so_cau_dung']})</b></td></tr>
+                        </table>
+                        <br><br>
                         <table style="width:100%; text-align:center;">
                             <tr>
-                                <td><b>GIÁO VIÊN</b><br><br><br>(Ký tên)</td>
-                                <td><b>HỌC SINH</b><br><br><br>(Ký tên)</td>
+                                <td><b>GIÁO VIÊN BỘ MÔN</b><br><br><br>(Ký tên)</td>
+                                <td><b>HỌC SINH XÁC NHẬN</b><br><br><br>(Ký tên)</td>
                             </tr>
                         </table>
                     </div>
                     """, unsafe_allow_html=True)
-                    html_print = f"<html><body onload='window.print()'><div style='border:2px solid black; padding:30px; font-family:Arial;'> <h2 style='text-align:center;'>PHIẾU KẾT QUẢ</h2> <p>Học sinh: {h['ho_ten'].upper()}</p> <p>Lớp: {h['lop']}</p> <p>Điểm: {h['diem']}</p> <br><br> <table style='width:100%; text-align:center;'><tr><td>Giáo viên</td><td>Học sinh</td></tr></table> </div></body></html>"
+                    html_print = f"<html><body onload='window.print()'><div style='border:2px solid black; padding:30px; font-family:Arial;'> <h2 style='text-align:center;'>PHIẾU KẾT QUẢ</h2> <p>Học sinh: {h['ho_ten'].upper()}</p> <p>Lớp: {h['lop']}</p> <p>Điểm: {h['diem']} ({h['so_cau_dung']})</p> <br><br> <table style='width:100%; text-align:center;'><tr><td>Giáo viên</td><td>Học sinh</td></tr></table> </div></body></html>"
                     st.download_button("📥 TẢI FILE IN", data=html_print.encode('utf-8'), file_name=f"KetQua_{h['ho_ten']}.html", mime="text/html")
