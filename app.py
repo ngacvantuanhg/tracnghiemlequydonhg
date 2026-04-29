@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 import pytz
 import time
 import random
-import hashlib
+
 
 # ============================================================
 # KẾT NỐI HỆ THỐNG
@@ -199,16 +199,14 @@ def shuffle_questions(questions):
     return shuffled
 
 
-def make_fingerprint():
-    """Tạo fingerprint đơn giản chống spam nộp bài."""
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d-%H")
-    raw = f"{st.session_state.get('st_name','')}-{st.session_state.get('st_class','')}-{st.session_state.get('ma_de_dang_thi','')}-{now}"
-    return hashlib.md5(raw.encode()).hexdigest()
-
-
-def check_duplicate(fingerprint):
-    res = supabase.table("student_results").select("id").eq("fingerprint", fingerprint).execute()
-    return bool(res.data)
+def check_duplicate(ho_ten, ma_de, ngay_thi):
+    """Kiểm tra học sinh đã nộp bài cho đề này chưa."""
+    try:
+        res = supabase.table("student_results").select("id") \
+            .eq("ho_ten", ho_ten).eq("ma_de", ma_de).eq("ngay_thi", ngay_thi).execute()
+        return bool(res.data)
+    except Exception:
+        return False
 
 
 def render_timer(seconds_left, total_seconds):
@@ -320,14 +318,13 @@ with tab_hs:
                 if u_choices.get(i) and u_choices[i].startswith(q.get('answer_key', ''))
             )
             grade = round((c_num / len(quiz)) * 10, 2)
-            fp = make_fingerprint()
-            if not check_duplicate(fp):
+            if not check_duplicate(state["st_name"], state["ma_de_dang_thi"], state["ngay_thi"]):
                 supabase.table("student_results").insert({
                     "ma_de": state["ma_de_dang_thi"], "ho_ten": state["st_name"],
                     "lop": state["st_class"], "diem": grade,
                     "so_cau_dung": f"{c_num}/{len(quiz)}",
                     "lop_thi": state["mon_hoc"], "lop_kiem_tra": state["lop_kiem_tra"],
-                    "ngay_thi": state["ngay_thi"], "fingerprint": fp
+                    "ngay_thi": state["ngay_thi"]
                 }).execute()
             state.update({"is_testing": False, "show_result": True,
                           "last_grade": grade, "last_correct": c_num,
@@ -376,8 +373,7 @@ with tab_hs:
                     if u_choices.get(i) and u_choices[i].startswith(q.get('answer_key', ''))
                 )
                 grade = round((c_num / len(quiz)) * 10, 2)
-                fp = make_fingerprint()
-                if check_duplicate(fp):
+                if check_duplicate(state["st_name"], state["ma_de_dang_thi"], state["ngay_thi"]):
                     st.error("⚠️ Bài thi này đã được nộp. Không thể nộp lại!")
                 else:
                     supabase.table("student_results").insert({
@@ -385,7 +381,7 @@ with tab_hs:
                         "lop": state["st_class"], "diem": grade,
                         "so_cau_dung": f"{c_num}/{len(quiz)}",
                         "lop_thi": state["mon_hoc"], "lop_kiem_tra": state["lop_kiem_tra"],
-                        "ngay_thi": state["ngay_thi"], "fingerprint": fp
+                        "ngay_thi": state["ngay_thi"]
                     }).execute()
                     state.update({
                         "is_testing": False, "show_result": True,
