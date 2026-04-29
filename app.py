@@ -25,33 +25,20 @@ st.markdown(f"""
     <style>
     .stApp {{ background-image: url("{bg_img}"); background-attachment: fixed; background-size: cover; background-position: center; }}
     .main {{ background-color: rgba(255, 255, 255, 0.9); padding: 2rem; border-radius: 20px; }}
-    div[data-baseweb="input"], div[data-baseweb="select"] {{
-        background-color: #ffffff !important; border: 2px solid #cbd5e1 !important;
-    }}
-    .printable-card {{
-        background: white; padding: 40px; border: 2px solid #1e3a8a; color: black; border-radius: 10px;
-    }}
+    .printable-card {{ background: white; padding: 30px; border: 2px solid #1e3a8a; color: black; border-radius: 10px; }}
     </style>
     """, unsafe_allow_html=True)
 
 # --- HÀM HỖ TRỢ ---
-def format_vietnam_time(utc_time_str):
-    try:
-        utc_dt = datetime.fromisoformat(utc_time_str.replace('Z', '+00:00'))
-        vn_tz = pytz.timezone('Asia/Ho_Chi_Minh')
-        return utc_dt.astimezone(vn_tz).strftime("%H:%M:%S %d/%m/%Y")
-    except: return utc_time_str
-
-def parse_docx_strict(file):
+def parse_docx_v50(file):
     doc = Document(file)
     questions = []
     full_text_with_marks = ""
     for para in doc.paragraphs:
         para_text = ""
         for run in para.runs:
-            # Kiểm tra mã màu đỏ FF0000 cực kỳ nghiêm ngặt
-            is_red = run.font.color and run.font.color.rgb and str(run.font.color.rgb) == "FF0000"
-            if is_red:
+            # Kiểm tra màu đỏ FF0000
+            if run.font.color and run.font.color.rgb and str(run.font.color.rgb) == "FF0000":
                 para_text += f"[[DUNG]]{run.text}[[HET]]"
             else:
                 para_text += run.text
@@ -66,19 +53,15 @@ def parse_docx_strict(file):
         options = []
         ans_key = ""
         for j in range(1, len(parts), 2):
-            label = parts[j].strip().upper()[0]
+            label = parts[j].strip().upper()[0] # Lấy A, B, C hoặc D
             content = parts[j+1]
             if "[[DUNG]]" in content:
-                ans_key = label # Ghi nhận đáp án đúng
+                ans_key = label # Lưu đúng ký tự A/B/C/D
             clean_val = content.replace("[[DUNG]]", "").replace("[[HET]]", "").strip()
             options.append(f"{label}. {clean_val}")
         
         if options:
-            questions.append({
-                "question": f"{header} {question_text}",
-                "options": options,
-                "answer_key": ans_key
-            })
+            questions.append({"question": f"{header} {question_text}", "options": options, "answer_key": ans_key})
     return questions
 
 # --- TIÊU ĐỀ ---
@@ -98,7 +81,7 @@ with tab_hs:
         filtered_codes = [i['ma_de'] for i in all_exams_data if str(i.get('ten_mon', '')).strip() == sel_subject]
         sel_ma_de = st.selectbox("🔑 Mã đề:", options=["-- Chọn mã đề --"] + filtered_codes)
         
-        if st.button("🚀 BẮT ĐẦU"):
+        if st.button("🚀 BẮT ĐẦU LÀM BÀI"):
             if name and actual_class and sel_ma_de != "-- Chọn mã đề --":
                 ex_res = supabase.table("exam_questions").select("*").eq("ma_de", sel_ma_de).execute()
                 if ex_res.data:
@@ -109,19 +92,22 @@ with tab_hs:
                         "mon_hoc": inf.get('ten_mon'), "ngay_thi": inf.get('ngay_thi')
                     })
                     st.rerun()
-            else: st.error("Thiếu thông tin bạn ơi!")
+            else: st.error("Điền đủ thông tin em nhé!")
     else:
         with st.form("quiz_form"):
-            st.info(f"Thí sinh: {st.session_state['st_name']} | Đề: {st.session_state['ma_de_dang_thi']}")
+            st.info(f"Thí sinh: {st.session_state['st_name']} | Môn: {st.session_state['mon_hoc']}")
             u_choices = {}
             for idx, q in enumerate(st.session_state["quiz_data"]):
                 st.write(f"**{idx+1}. {q['question']}**")
-                u_choices[idx] = st.radio("Chọn:", q['options'], index=None, key=f"q_{idx}", label_visibility="collapsed")
-            if st.form_submit_button("📤 NỘP BÀI"):
+                u_choices[idx] = st.radio("Chọn đáp án:", q['options'], index=None, key=f"q_{idx}", label_visibility="collapsed")
+            
+            if st.form_submit_button("📤 NỘP BÀI THI"):
                 c_num = 0
                 for i, q in enumerate(st.session_state["quiz_data"]):
-                    if u_choices[i] and q['answer_key'] and u_choices[i].startswith(q['answer_key']):
+                    # So sánh ký tự đầu của đáp án đã chọn với answer_key
+                    if u_choices[i] and u_choices[i].strip().startswith(q['answer_key']):
                         c_num += 1
+                
                 grade = round((c_num / len(st.session_state["quiz_data"])) * 10, 2)
                 supabase.table("student_results").insert({
                     "ma_de": st.session_state["ma_de_dang_thi"], "ho_ten": st.session_state["st_name"], 
@@ -129,20 +115,45 @@ with tab_hs:
                     "lop_thi": st.session_state["mon_hoc"], "ngay_thi": st.session_state["ngay_thi"]
                 }).execute()
                 st.session_state["is_testing"] = False
-                st.success(f"Nộp bài thành công! Điểm: {grade}"); time.sleep(2); st.rerun()
+                st.success(f"Nộp bài thành công! Số câu đúng: {c_num}/{len(st.session_state['quiz_data'])} - Điểm: {grade}")
+                time.sleep(3); st.rerun()
 
 with tab_gv:
-    pwd = st.text_input("🔐 Mật khẩu:", type="password")
-    if pwd == ADMIN_PASSWORD:
+    # KIỂM TRA ĐĂNG NHẬP
+    if "admin_logged_in" not in st.session_state:
+        st.session_state["admin_logged_in"] = False
+
+    if not st.session_state["admin_logged_in"]:
+        st.subheader("🔐 Đăng nhập Quản trị viên")
+        pwd_input = st.text_input("Nhập mật khẩu:", type="password")
+        if st.button("Đăng nhập"):
+            if pwd_input == ADMIN_PASSWORD:
+                st.session_state["admin_logged_in"] = True
+                st.rerun()
+            else:
+                st.error("Mật khẩu không đúng!")
+    else:
+        # Giao diện khi đã đăng nhập thành công
+        col_header, col_logout = st.columns([5, 1])
+        with col_header:
+            st.success("✅ Đã đăng nhập quyền Quản trị")
+        with col_logout:
+            if st.button("🚪 Thoát"):
+                st.session_state["admin_logged_in"] = False
+                st.rerun()
+
         c1, c2 = st.columns([1, 2])
         with c1:
             st.subheader("📤 ĐĂNG ĐỀ")
             n_ma = st.text_input("Mã đề:"); t_mon = st.text_input("Môn:"); f_word = st.file_uploader("File Word:", type=["docx"])
-            if st.button("🚀 Kích hoạt"):
+            if st.button("🚀 Kích hoạt đề"):
                 if n_ma and t_mon and f_word:
-                    d_js = parse_docx_strict(f_word)
-                    supabase.table("exam_questions").upsert({"ma_de": n_ma, "nội_dung_json": d_js, "ten_mon": t_mon, "ngay_thi": datetime.now().strftime("%d/%m/%Y")}).execute()
-                    st.success("Đã đăng đề!"); time.sleep(1); st.rerun()
+                    d_js = parse_docx_v50(f_word)
+                    supabase.table("exam_questions").upsert({
+                        "ma_de": n_ma, "nội_dung_json": d_js, 
+                        "ten_mon": t_mon, "ngay_thi": datetime.now().strftime("%d/%m/%Y")
+                    }).execute()
+                    st.success("Đã đăng đề thành công!"); time.sleep(1); st.rerun()
             st.divider()
             if st.button("🔥 XÓA TẤT CẢ KẾT QUẢ"):
                 supabase.table("student_results").delete().neq("id", 0).execute(); st.rerun()
@@ -156,24 +167,21 @@ with tab_gv:
                 s_hs = st.selectbox("🖨️ Chọn học sinh in phiếu:", ["-- Chọn --"] + sorted(df['ho_ten'].tolist()))
                 if s_hs != "-- Chọn --":
                     h = df[df['ho_ten'] == s_hs].iloc[0]
-                    # KHÔI PHỤC PHẦN IN KÝ TÊN
                     st.markdown(f"""
                     <div class="printable-card">
                         <h2 style="text-align:center;">PHIẾU MINH CHỨNG KẾT QUẢ</h2>
-                        <p style="text-align:center;">Trường THCS Lê Quý Đôn - Tuyên Quang</p>
                         <hr>
                         <p><b>Học sinh:</b> {h['ho_ten'].upper()} &nbsp;&nbsp;&nbsp; <b>Lớp:</b> {h['lop']}</p>
                         <p><b>Môn thi:</b> {h['lop_thi']} &nbsp;&nbsp;&nbsp; <b>Mã đề:</b> {h['ma_de']}</p>
                         <p><b>Kết quả: {h['diem']} điểm ({h['so_cau_dung']})</b></p>
-                        <br><br>
+                        <br>
                         <table style="width:100%; text-align:center;">
                             <tr>
-                                <td><b>GIÁO VIÊN BỘ MÔN</b><br><br><br>(Ký tên)</td>
-                                <td><b>HỌC SINH XÁC NHẬN</b><br><br><br>(Ký tên)</td>
+                                <td><b>GIÁO VIÊN</b><br><br><br>(Ký tên)</td>
+                                <td><b>HỌC SINH</b><br><br><br>(Ký tên)</td>
                             </tr>
                         </table>
                     </div>
                     """, unsafe_allow_html=True)
-                    # Nút tải file in cực ổn định
-                    html_print = f"<html><head><meta charset='utf-8'></head><body onload='window.print()'><div style='border:2px solid black; padding:30px; font-family:Arial;'> <h2 style='text-align:center;'>PHIẾU KẾT QUẢ</h2> <p>Học sinh: {h['ho_ten'].upper()}</p> <p>Lớp: {h['lop']}</p> <p>Điểm: {h['diem']}</p> <br><br> <table style='width:100%;'><tr><td>Giáo viên</td><td>Học sinh</td></tr></table> </div></body></html>"
-                    st.download_button("📥 TẢI FILE IN", data=html_print, file_name=f"KetQua_{h['ho_ten']}.html", mime="text/html")
+                    html_print = f"<html><body onload='window.print()'><div style='border:2px solid black; padding:30px; font-family:Arial;'> <h2 style='text-align:center;'>PHIẾU KẾT QUẢ</h2> <p>Học sinh: {h['ho_ten'].upper()}</p> <p>Lớp: {h['lop']}</p> <p>Điểm: {h['diem']}</p> <br><br> <table style='width:100%; text-align:center;'><tr><td>Giáo viên</td><td>Học sinh</td></tr></table> </div></body></html>"
+                    st.download_button("📥 TẢI FILE IN", data=html_print.encode('utf-8'), file_name=f"KetQua_{h['ho_ten']}.html", mime="text/html")
